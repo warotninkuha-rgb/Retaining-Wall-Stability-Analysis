@@ -67,6 +67,13 @@
             // Geometry State
             const [geom, setGeom] = useState({ H: 4.0, C: 0.6, D: 0.5, G: 0.3, F: 1.4, T1: 0.4, waterDepth: 1.5 });
 
+            // Layer Visibility State (ย้ายมาไว้บนสุดเพื่อป้องกัน Error Rule of Hooks)
+            const [showP1, setShowP1] = useState(true);
+            const [showP2Tri, setShowP2Tri] = useState(true);
+            const [showP2Rect, setShowP2Rect] = useState(true);
+            const [showP3, setShowP3] = useState(true);
+            const [showP4, setShowP4] = useState(true);
+
             const calc = useMemo(() => {
                 // Soil Mechanics
                 const gamma_w = 1000;
@@ -170,7 +177,7 @@
             const GlobalNav = () => (
                 <div className="bg-slate-900 text-slate-300 text-sm py-2 px-4 flex justify-between items-center shadow-md">
                     <div className="flex items-center space-x-2">
-                        <svg className="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                        <svg className="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002-2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                         <span className="font-semibold text-white tracking-wide">STRUCTURAL APPS</span>
                     </div>
                 </div>
@@ -276,11 +283,13 @@
             );
 
             const TabDashboard = () => {
-                const scaleX = Math.min(450 / calc.B, 150); 
-                const scaleY = 250 / (geom.H + geom.T1);    
+                // คำนวณ Scale และตำแหน่งสำหรับวาดรูป Dashboard ใหม่ (Overall Behavior)
+                const scaleX = Math.min(300 / calc.B, 120); 
+                const scaleY = Math.min(250 / (geom.H + geom.T1), 100);    
                 const x0 = (600 - (calc.B * scaleX)) / 2;   
-                const y0 = 350; 
+                const y0 = 320; 
 
+                // มิติที่สเกลแล้ว
                 const svgH = geom.H * scaleY;
                 const svgT1 = geom.T1 * scaleY;
                 const svgC = geom.C * scaleX;
@@ -288,9 +297,28 @@
                 const svgG = geom.G * scaleX;
                 const svgF = geom.F * scaleX;
                 const svgB = calc.B * scaleX;
-                const svgm = calc.m * scaleX;
-                const svgd2 = calc.d2 * scaleY;
-                const svgd3 = calc.d3 * scaleY;
+
+                // พิกัดของรูปโพลีกอนกำแพงกันดิน (ภาพรวม)
+                const p1 = `${x0},${y0}`; // Toe Bot-L
+                const p2 = `${x0 + svgB},${y0}`; // Heel Bot-R
+                const p3 = `${x0 + svgB},${y0 - svgT1}`; // Heel Top-R
+                const p4 = `${x0 + svgC + svgD},${y0 - svgT1}`; // Stem Bot-R
+                const p5 = `${x0 + svgC + svgG},${y0 - svgT1 - svgH}`; // Stem Top-R
+                const p6 = `${x0 + svgC},${y0 - svgT1 - svgH}`; // Stem Top-L
+                const p7 = `${x0 + svgC},${y0 - svgT1}`; // Toe Top-R
+                const p8 = `${x0},${y0 - svgT1}`; // Toe Top-L
+                const wallPolygon = `${p1} ${p2} ${p3} ${p4} ${p5} ${p6} ${p7} ${p8}`;
+
+                // ตำแหน่งและสเกลกราฟแรงอัด
+                const max_q_value = Math.max(Math.abs(calc.q_max), Math.abs(calc.q_min), 1);
+                const q_scale = 80 / max_q_value; // จำกัดกราฟให้สูงไม่เกิน 80px
+                const h_max = calc.q_max * q_scale;
+                const h_min = calc.q_min * q_scale;
+
+                // จุดเซนทรอยด์ของแรง (แขนโมเมนต์)
+                const x_v = x0 + (calc.X_bar * scaleX);
+                const y_bar_P = calc.sumP > 0 ? calc.MO / calc.sumP : 0; // หาจุดศูนย์รวมแรงดันด้านข้าง
+                const y_p = y0 - (y_bar_P * scaleY);
 
                 return (
                     <div className="space-y-6">
@@ -318,119 +346,88 @@
                             </div>
                         </div>
 
-                        {/* Diagram */}
+                        {/* Overall Behavior Diagram */}
                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center overflow-visible">
-                            <h4 className="text-lg font-bold text-slate-700 mb-6 w-full text-center border-b pb-2">สัดส่วนพื้นที่หน้าตัด และ Dimensions (ไดอะแกรม)</h4>
-                            <svg viewBox="0 0 600 450" className="w-full max-w-3xl h-auto drop-shadow-sm mx-auto">
-                                {/* Ground Line */}
-                                <line x1="20" y1={y0 - svgH - svgT1} x2="580" y2={y0 - svgH - svgT1} stroke="#94a3b8" strokeWidth="2" strokeDasharray="5,5" />
+                            <h4 className="text-lg font-bold text-slate-700 mb-6 w-full text-center border-b pb-2">ไดอะแกรมแรงลัพธ์และแรงอัดใต้ฐานราก (Overall Behavior)</h4>
+                            {/* ปรับขยาย viewBox จาก 600 เป็น 650 เพื่อเพิ่มพื้นที่ฝั่งขวากันข้อความตกขอบ */}
+                            <svg viewBox="0 0 650 450" className="w-full max-w-3xl h-auto drop-shadow-sm mx-auto">
+                                <defs>
+                                    <pattern id="diagonalHatch" patternUnits="userSpaceOnUse" width="8" height="8">
+                                        <path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="#fb7185" strokeWidth="1" />
+                                    </pattern>
+                                    <pattern id="tensionHatch" patternUnits="userSpaceOnUse" width="8" height="8">
+                                        <path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="#c084fc" strokeWidth="1" />
+                                    </pattern>
+                                </defs>
+
+                                {/* ผิวดินและเส้นฐาน (ปรับ x2 ให้ยาวขึ้นตามขนาดจอ 650) */}
+                                <line x1="20" y1={y0 - svgH - svgT1} x2="630" y2={y0 - svgH - svgT1} stroke="#94a3b8" strokeWidth="2" strokeDasharray="5,5" />
+                                <text x="610" y={y0 - svgH - svgT1 - 8} fill="#64748b" fontSize="12" textAnchor="end">ระดับดิน</text>
+
+                                {/* รูปทรงกำแพงรวม */}
+                                <polygon points={wallPolygon} fill="#e2e8f0" stroke="#64748b" strokeWidth="2" strokeLinejoin="round" />
+
+                                {/* กราฟแรงอัดใต้ฐานราก (Bearing Pressure) */}
+                                {/* แกนอ้างอิง 0 */}
+                                <line x1={x0} y1={y0} x2={x0 + svgB} y2={y0} stroke="#475569" strokeWidth="2" />
                                 
-                                {/* W1: Toe Base */}
-                                <rect x={x0} y={y0 - svgT1} width={svgC} height={svgT1} fill="#94a3b8" stroke="#475569" strokeWidth="1" />
-                                {geom.C > 0 && <text x={x0 + svgC/2} y={y0 - svgT1/2 + 5} fill="#1e293b" fontSize="14" textAnchor="middle" fontWeight="bold">W1</text>}
+                                {/* พื้นที่ใต้กราฟ */}
+                                <polygon 
+                                    points={`${x0},${y0} ${x0 + svgB},${y0} ${x0 + svgB},${y0 + h_min} ${x0},${y0 + h_max}`}
+                                    fill={calc.q_min < 0 ? "url(#tensionHatch)" : "url(#diagonalHatch)"}
+                                    stroke={calc.q_min < 0 ? "#a855f7" : "#e11d48"} strokeWidth="1.5"
+                                />
+                                
+                                {/* เส้นขอบกราฟแรงอัด */}
+                                <line x1={x0} y1={y0 + h_max} x2={x0 + svgB} y2={y0 + h_min} stroke="#be123c" strokeWidth="2" />
+                                <line x1={x0} y1={y0} x2={x0} y2={y0 + h_max} stroke="#be123c" strokeWidth="2" />
+                                <line x1={x0 + svgB} y1={y0} x2={x0 + svgB} y2={y0 + h_min} stroke="#be123c" strokeWidth="2" />
 
-                                {/* W4: Stem+Heel Base */}
-                                <rect x={x0 + svgC} y={y0 - svgT1} width={svgD + svgF} height={svgT1} fill="#cbd5e1" stroke="#475569" strokeWidth="1" />
-                                <text x={x0 + svgC + (svgD+svgF)/2} y={y0 - svgT1/2 + 5} fill="#1e293b" fontSize="14" textAnchor="middle" fontWeight="bold">W4</text>
+                                {/* Text Label แรงอัด */}
+                                <text x={x0 - 8} y={y0 + h_max + (calc.q_max > 0 ? 15 : -5)} fill="#be123c" fontSize="14" fontWeight="bold" textAnchor="end">
+                                    q_max = {calc.q_max.toFixed(0)}
+                                </text>
+                                <text x={x0 + svgB + 8} y={y0 + h_min + (calc.q_min > 0 ? 15 : -5)} fill={calc.q_min < 0 ? "#7e22ce" : "#be123c"} fontSize="14" fontWeight="bold" textAnchor="start">
+                                    q_min = {calc.q_min.toFixed(0)} {calc.q_min < 0 && '(Tension)'}
+                                </text>
 
-                                {/* W2: Stem Rect */}
-                                <rect x={x0 + svgC} y={y0 - svgT1 - svgH} width={svgG} height={svgH} fill="#e2e8f0" stroke="#475569" strokeWidth="1" />
-                                {geom.G > 0 && <text x={x0 + svgC + svgG/2} y={y0 - svgT1 - svgH/2 + 5} fill="#1e293b" fontSize="14" textAnchor="middle" fontWeight="bold">W2</text>}
+                                {/* ลูกศรแรงต้านแนวดิ่ง (V) วาดด้วย Polygon ป้องกันบัค */}
+                                <line x1={x_v} y1={y0 - svgH - svgT1 - 60} x2={x_v} y2={y0 - 35} stroke="#10b981" strokeWidth="4" strokeDasharray="6,4" />
+                                <polygon points={`${x_v - 8},${y0 - 36} ${x_v + 8},${y0 - 36} ${x_v},${y0 - 20}`} fill="#10b981" />
+                                <circle cx={x_v} cy={y0} r="4" fill="#10b981" />
+                                <text x={x_v + 12} y={y0 - svgH - svgT1 - 45} fill="#047857" fontSize="16" fontWeight="bold">
+                                    &#931;V = {calc.sumV.toFixed(0)} kg
+                                </text>
+                                <text x={x_v + 12} y={y0 - svgH - svgT1 - 25} fill="#047857" fontSize="13">
+                                    (X&#772; = {calc.X_bar.toFixed(2)}m)
+                                </text>
 
-                                {/* W3: Stem Triangle */}
-                                {calc.m > 0 && (
+                                {/* ลูกศรแรงผลักด้านข้าง (P) วาดด้วย Polygon ให้ปลายชนขอบกำแพงเป๊ะๆ */}
+                                <line x1={x0 + svgB + 100} y1={y_p} x2={x0 + svgB + 15} y2={y_p} stroke="#0ea5e9" strokeWidth="4" />
+                                <polygon points={`${x0 + svgB + 16},${y_p - 8} ${x0 + svgB + 16},${y_p + 8} ${x0 + svgB},${y_p}`} fill="#0ea5e9" />
+                                <text x={x0 + svgB + 55} y={y_p - 12} fill="#0369a1" fontSize="16" fontWeight="bold" textAnchor="middle">
+                                    &#931;P = {calc.sumP.toFixed(0)} kg
+                                </text>
+                                <text x={x0 + svgB + 55} y={y_p + 20} fill="#0369a1" fontSize="13" textAnchor="middle">
+                                    (y&#772; = {y_bar_P.toFixed(2)}m)
+                                </text>
+
+                                {/* ระยะเยื้องศูนย์ e และกึ่งกลางฐาน เลื่อนลงมาใต้กราฟแรงอัดเพื่อไม่ให้ทับกับลายเส้น */}
+                                <line x1={x0 + svgB/2} y1={y0} x2={x0 + svgB/2} y2={y0 + 105} stroke="#64748b" strokeWidth="1" strokeDasharray="3,3" />
+                                <text x={x0 + svgB/2} y={y0 + 120} fill="#64748b" fontSize="12" textAnchor="middle">B/2 ({(calc.B/2).toFixed(2)}m)</text>
+
+                                {/* ขีดเส้นประแนวแรง V ลงมาด้านล่าง */}
+                                <line x1={x_v} y1={y0} x2={x_v} y2={y0 + 105} stroke="#10b981" strokeWidth="1" strokeDasharray="3,3" opacity="0.6" />
+                                
+                                {Math.abs(calc.e) > 0.05 && (
                                     <g>
-                                        <polygon points={`${x0+svgC+svgG},${y0-svgT1-svgH} ${x0+svgC+svgD},${y0-svgT1} ${x0+svgC+svgG},${y0-svgT1}`} fill="#f1f5f9" stroke="#475569" strokeWidth="1" />
-                                        <text x={x0 + svgC + svgG + svgm/3} y={y0 - svgT1 - svgH/3 + 5} fill="#1e293b" fontSize="14" textAnchor="middle" fontWeight="bold">W3</text>
+                                        <line x1={x0 + svgB/2} y1={y0 + 95} x2={x_v} y2={y0 + 95} stroke="#f59e0b" strokeWidth="2" />
+                                        {/* ขีดเส้นตั้งปิดหัวท้ายให้ดูเป็น Dimension ชัดเจน */}
+                                        <line x1={x0 + svgB/2} y1={y0 + 90} x2={x0 + svgB/2} y2={y0 + 100} stroke="#f59e0b" strokeWidth="2" />
+                                        <line x1={x_v} y1={y0 + 90} x2={x_v} y2={y0 + 100} stroke="#f59e0b" strokeWidth="2" />
+                                        <text x={(x0 + svgB/2 + x_v)/2} y={y0 + 88} fill="#d97706" fontSize="13" fontWeight="bold" textAnchor="middle">e = {calc.e.toFixed(3)}</text>
                                     </g>
                                 )}
-
-                                {/* W5: Soil Wedge */}
-                                {calc.m > 0 && (
-                                    <g>
-                                        <polygon points={`${x0+svgC+svgG},${y0-svgT1-svgH} ${x0+svgC+svgD},${y0-svgT1-svgH} ${x0+svgC+svgD},${y0-svgT1}`} fill="#fde68a" stroke="#d97706" strokeWidth="1" />
-                                        <text x={x0 + svgC + svgG + svgm*2/3} y={y0 - svgT1 - svgH*2/3 + 5} fill="#92400e" fontSize="14" textAnchor="middle" fontWeight="bold">W5</text>
-                                    </g>
-                                )}
-
-                                {/* W6: Dry Soil */}
-                                {calc.d2 > 0 && (
-                                    <g>
-                                        <rect x={x0 + svgC + svgD} y={y0 - svgT1 - svgH} width={svgF} height={svgd2} fill="#fcd34d" stroke="#d97706" strokeWidth="1" />
-                                        <text x={x0 + svgC + svgD + svgF/2} y={y0 - svgT1 - svgH + svgd2/2 + 5} fill="#92400e" fontSize="14" textAnchor="middle" fontWeight="bold">W6</text>
-                                    </g>
-                                )}
-
-                                {/* W7: Wet Soil */}
-                                {calc.d3 > 0 && (
-                                    <g>
-                                        <rect x={x0 + svgC + svgD} y={y0 - svgT1 - svgH + svgd2} width={svgF} height={svgd3} fill="#93c5fd" stroke="#2563eb" strokeWidth="1" />
-                                        <text x={x0 + svgC + svgD + svgF/2} y={y0 - svgT1 - svgH + svgd2 + svgd3/2 + 5} fill="#1e3a8a" fontSize="14" textAnchor="middle" fontWeight="bold">W7</text>
-                                    </g>
-                                )}
-
-                                {/* W8: Surcharge */}
-                                {surcharge > 0 && (
-                                    <g>
-                                        <rect x={x0 + svgC + svgG} y={y0 - svgT1 - svgH - 25} width={svgm + svgF} height={25} fill="rgba(14, 165, 233, 0.1)" stroke="#0ea5e9" strokeDasharray="4" strokeWidth="1" />
-                                        <text x={x0 + svgC + svgG + (svgm+svgF)/2} y={y0 - svgT1 - svgH - 7} fill="#0369a1" fontSize="14" textAnchor="middle" fontWeight="bold">W8 (Surcharge)</text>
-                                    </g>
-                                )}
-
-                                {/* Bottom Dimensions */}
-                                <g stroke="#64748b" strokeWidth="1">
-                                    <line x1={x0} y1={y0 + 35} x2={x0 + svgB} y2={y0 + 35} />
-                                    <line x1={x0} y1={y0 + 30} x2={x0} y2={y0 + 40} />
-                                    {geom.C > 0 && <line x1={x0 + svgC} y1={y0 + 30} x2={x0 + svgC} y2={y0 + 40} />}
-                                    <line x1={x0 + svgC + svgD} y1={y0 + 30} x2={x0 + svgC + svgD} y2={y0 + 40} />
-                                    <line x1={x0 + svgB} y1={y0 + 30} x2={x0 + svgB} y2={y0 + 40} />
-                                </g>
-                                <g fill="#475569" fontSize="13" textAnchor="middle" fontFamily="sans-serif">
-                                    {geom.C > 0 && <text x={x0 + svgC/2} y={y0 + 55}>C={geom.C}</text>}
-                                    <text x={x0 + svgC + svgD/2} y={y0 + 55}>D={geom.D}</text>
-                                    <text x={x0 + svgC + svgD + svgF/2} y={y0 + 55}>F={geom.F}</text>
-                                </g>
-
-                                {/* Top Dimensions */}
-                                <g stroke="#64748b" strokeWidth="1">
-                                    {geom.G > 0 && <line x1={x0 + svgC} y1={y0 - svgT1 - svgH - 40} x2={x0 + svgC + svgG} y2={y0 - svgT1 - svgH - 40} />}
-                                    {calc.m > 0 && <line x1={x0 + svgC + svgG} y1={y0 - svgT1 - svgH - 40} x2={x0 + svgC + svgD} y2={y0 - svgT1 - svgH - 40} />}
-                                    
-                                    <line x1={x0 + svgC} y1={y0 - svgT1 - svgH - 45} x2={x0 + svgC} y2={y0 - svgT1 - svgH - 35} />
-                                    {geom.G > 0 && <line x1={x0 + svgC + svgG} y1={y0 - svgT1 - svgH - 45} x2={x0 + svgC + svgG} y2={y0 - svgT1 - svgH - 35} />}
-                                    {calc.m > 0 && <line x1={x0 + svgC + svgD} y1={y0 - svgT1 - svgH - 45} x2={x0 + svgC + svgD} y2={y0 - svgT1 - svgH - 35} />}
-                                </g>
-                                <g fill="#475569" fontSize="13" textAnchor="middle" fontFamily="sans-serif">
-                                    {geom.G > 0 && <text x={x0 + svgC + svgG/2} y={y0 - svgT1 - svgH - 50}>G={geom.G}</text>}
-                                    {calc.m > 0 && <text x={x0 + svgC + svgG + svgm/2} y={y0 - svgT1 - svgH - 50}>m={calc.m.toFixed(2)}</text>}
-                                </g>
-
-                                {/* Left Dimensions */}
-                                <g stroke="#64748b" strokeWidth="1">
-                                    <line x1={x0 - 35} y1={y0} x2={x0 - 35} y2={y0 - svgT1 - svgH} />
-                                    <line x1={x0 - 40} y1={y0} x2={x0 - 30} y2={y0} />
-                                    <line x1={x0 - 40} y1={y0 - svgT1} x2={x0 - 30} y2={y0 - svgT1} />
-                                    <line x1={x0 - 40} y1={y0 - svgT1 - svgH} x2={x0 - 30} y2={y0 - svgT1 - svgH} />
-                                </g>
-                                <g fill="#475569" fontSize="13" textAnchor="end" dominantBaseline="middle" fontFamily="sans-serif">
-                                    <text x={x0 - 45} y={y0 - svgT1/2}>T1={geom.T1}</text>
-                                    <text x={x0 - 45} y={y0 - svgT1 - svgH/2}>H={geom.H}</text>
-                                </g>
-
-                                {/* Right Dimensions */}
-                                <g stroke="#64748b" strokeWidth="1">
-                                    <line x1={x0 + svgB + 20} y1={y0 - svgT1 - svgH} x2={x0 + svgB + 20} y2={y0 - svgT1} />
-                                    <line x1={x0 + svgB + 15} y1={y0 - svgT1 - svgH} x2={x0 + svgB + 25} y2={y0 - svgT1 - svgH} />
-                                    {calc.d3 > 0 && calc.d2 > 0 && <line x1={x0 + svgB + 15} y1={y0 - svgT1 - svgH + svgd2} x2={x0 + svgB + 25} y2={y0 - svgT1 - svgH + svgd2} />}
-                                    <line x1={x0 + svgB + 15} y1={y0 - svgT1} x2={x0 + svgB + 25} y2={y0 - svgT1} />
-                                </g>
-                                <g fill="#475569" fontSize="13" textAnchor="start" dominantBaseline="middle" fontFamily="sans-serif">
-                                    {calc.d2 > 0 && <text x={x0 + svgB + 30} y={y0 - svgT1 - svgH + svgd2/2}>d2={calc.d2.toFixed(2)}</text>}
-                                    {calc.d3 > 0 && <text x={x0 + svgB + 30} y={y0 - svgT1 - svgH + svgd2 + svgd3/2}>d3={calc.d3.toFixed(2)}</text>}
-                                </g>
-
-                                <circle cx={x0} cy={y0} r="6" fill="#dc2626" />
-                                <text x={x0 - 15} y={y0 + 15} fill="#dc2626" fontSize="14" fontWeight="bold" textAnchor="end">จุดหมุน Toe</text>
                             </svg>
                         </div>
                     </div>
@@ -438,12 +435,6 @@
             };
 
             const TabDriving = () => {
-                const [showP1, setShowP1] = useState(true);
-                const [showP2Tri, setShowP2Tri] = useState(true);
-                const [showP2Rect, setShowP2Rect] = useState(true);
-                const [showP3, setShowP3] = useState(true);
-                const [showP4, setShowP4] = useState(true);
-
                 const scaleY = 280 / calc.H_tot; 
                 const maxP = calc.p1 + calc.p2 + calc.p3 + calc.p4;
                 const scaleX = maxP > 0 ? 250 / maxP : 1;
@@ -1182,7 +1173,7 @@
 
             return (
                 <div className="max-w-6xl mx-auto pb-12 font-sans">
-                    <GlobalNav />
+                    {GlobalNav()}
                     
                     <div className="p-4 md:p-6">
                         <header className="mb-6">
@@ -1190,7 +1181,7 @@
                             <p className="text-slate-500 text-sm mt-1">โปรแกรมวิเคราะห์เสถียรภาพและแรงดันดินใต้ฐานรากกำแพงกันดิน (Metric Unit)</p>
                         </header>
 
-                        <GlobalInputs />
+                        {GlobalInputs()}
 
                         <div className="flex overflow-x-auto no-scrollbar border-b border-slate-300 mb-6 space-x-1">
                             {[
@@ -1212,12 +1203,12 @@
                         </div>
 
                         <main>
-                            {activeTab === 'dashboard' && <TabDashboard />}
-                            {activeTab === 'driving' && <TabDriving />}
-                            {activeTab === 'resisting' && <TabResisting />}
-                            {activeTab === 'stability' && <TabStability />}
-                            {activeTab === 'bearing' && <TabBearing />}
-                            {activeTab === 'manual' && <TabManual />}
+                            {activeTab === 'dashboard' && TabDashboard()}
+                            {activeTab === 'driving' && TabDriving()}
+                            {activeTab === 'resisting' && TabResisting()}
+                            {activeTab === 'stability' && TabStability()}
+                            {activeTab === 'bearing' && TabBearing()}
+                            {activeTab === 'manual' && TabManual()}
                         </main>
                     </div>
                 </div>
