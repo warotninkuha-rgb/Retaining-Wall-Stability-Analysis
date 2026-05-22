@@ -63,11 +63,12 @@
             const [soil, setSoil] = useState({ gamma_c: 1900, gamma_sat: 2100, phi: 30 });
             const [base, setBase] = useState({ f: 0.5, q_allow: 8000 });
             const [surcharge, setSurcharge] = useState(500);
+            const [designLength, setDesignLength] = useState(1.0);
             
             // Geometry State
             const [geom, setGeom] = useState({ H: 4.0, C: 0.6, D: 0.5, G: 0.3, F: 1.4, T1: 0.4, waterDepth: 1.5 });
 
-            // Layer Visibility State (ย้ายมาไว้บนสุดเพื่อป้องกัน Error Rule of Hooks)
+            // Layer Visibility State 
             const [showP1, setShowP1] = useState(true);
             const [showP2Tri, setShowP2Tri] = useState(true);
             const [showP2Rect, setShowP2Rect] = useState(true);
@@ -79,6 +80,7 @@
                 const gamma_w = 1000;
                 const gamma_sub = soil.gamma_sat - gamma_w;
                 const Ka = Math.pow(Math.tan((45 - soil.phi/2) * Math.PI/180), 2);
+                const L = designLength;
                 
                 // Geometry logic
                 const B = geom.C + geom.D + geom.F;
@@ -89,46 +91,46 @@
 
                 // Driving Forces
                 const p1 = Ka * surcharge;
-                const P1 = p1 * H_tot;
+                const P1 = p1 * H_tot * L;
                 const y1 = H_tot / 2;
                 
                 const p2 = Ka * soil.gamma_c * d2;
-                const P2_tri = 0.5 * p2 * d2;
+                const P2_tri = 0.5 * p2 * d2 * L;
                 const y2_tri = d3 + geom.T1 + (d2 / 3);
-                const P2_rect = p2 * (d3 + geom.T1);
+                const P2_rect = p2 * (d3 + geom.T1) * L;
                 const y2_rect = (d3 + geom.T1) / 2;
                 const P2 = P2_tri + P2_rect;
                 
                 const p3 = Ka * gamma_sub * (d3 + geom.T1);
-                const P3 = 0.5 * p3 * (d3 + geom.T1);
+                const P3 = 0.5 * p3 * (d3 + geom.T1) * L;
                 const y3 = (d3 + geom.T1) / 3;
 
                 const p4 = gamma_w * (d3 + geom.T1);
-                const P4 = 0.5 * p4 * (d3 + geom.T1);
+                const P4 = 0.5 * p4 * (d3 + geom.T1) * L;
                 const y4 = (d3 + geom.T1) / 3;
 
                 const sumP = P1 + P2 + P3 + P4;
                 const MO = (P1*y1) + (P2_tri*y2_tri) + (P2_rect*y2_rect) + (P3*y3) + (P4*y4);
 
                 // Resisting Forces
-                const w1 = geom.C * geom.T1 * 2400; 
+                const w1 = geom.C * geom.T1 * 2400 * L; 
                 const x1 = geom.C / 2;
                 
-                const w2 = geom.G * geom.H * 2400; 
+                const w2 = geom.G * geom.H * 2400 * L; 
                 const x2 = geom.C + (geom.G / 2);
 
-                const w3 = 0.5 * m * geom.H * 2400; 
+                const w3 = 0.5 * m * geom.H * 2400 * L; 
                 const x3 = geom.C + geom.G + (m / 3);
 
-                const w4 = (geom.D + geom.F) * geom.T1 * 2400; 
+                const w4 = (geom.D + geom.F) * geom.T1 * 2400 * L; 
                 const x4 = geom.C + ((geom.D + geom.F) / 2);
 
                 const Area_tot = 0.5 * m * geom.H;
                 const m2 = geom.H > 0 ? m * (d3 / geom.H) : 0;
                 const Area_wet = 0.5 * m2 * d3;
                 const Area_dry = Area_tot - Area_wet;
-                const W5_wet = Area_wet * soil.gamma_sat;
-                const W5_dry = Area_dry * soil.gamma_c;
+                const W5_wet = Area_wet * soil.gamma_sat * L;
+                const W5_dry = Area_dry * soil.gamma_c * L;
                 const w5 = W5_wet + W5_dry;
                 
                 const x_tot = geom.C + geom.D - (m / 3);
@@ -136,13 +138,13 @@
                 const x_dry = Area_dry > 0 ? ((Area_tot * x_tot) - (Area_wet * x_wet)) / Area_dry : 0;
                 const x5 = w5 > 0 ? ((W5_dry * x_dry) + (W5_wet * x_wet)) / w5 : 0;
 
-                const w6 = geom.F * d2 * soil.gamma_c; 
+                const w6 = geom.F * d2 * soil.gamma_c * L; 
                 const x6 = geom.C + geom.D + (geom.F / 2);
 
-                const w7 = geom.F * d3 * soil.gamma_sat; 
+                const w7 = geom.F * d3 * soil.gamma_sat * L; 
                 const x7 = geom.C + geom.D + (geom.F / 2);
 
-                const w8 = surcharge * (m + geom.F); 
+                const w8 = surcharge * (m + geom.F) * L; 
                 const x8 = geom.C + geom.G + ((m + geom.F) / 2);
 
                 const sumV = w1 + w2 + w3 + w4 + w5 + w6 + w7 + w8;
@@ -158,17 +160,17 @@
                 const B6 = B / 6;
                 const isMiddleThird = Math.abs(e) <= B6;
                 
-                const q_max = (sumV / B) * (1 + (6 * e / B));
-                const q_min = (sumV / B) * (1 - (6 * e / B));
+                const q_max = (sumV / (B * L)) * (1 + (6 * e / B));
+                const q_min = (sumV / (B * L)) * (1 - (6 * e / B));
 
                 return {
-                    B, m, Ka, gamma_w, gamma_sub, d2, d3, H_tot,
+                    B, m, Ka, gamma_w, gamma_sub, d2, d3, H_tot, L,
                     p1, P1, y1, p2, P2_tri, y2_tri, P2_rect, y2_rect, P2, p3, P3, y3, p4, P4, y4, sumP, MO,
                     w1, x1, w2, x2, w3, x3, w4, x4, w5, x5, w6, x6, w7, x7, w8, x8, sumV, MR,
                     FS_ot, FS_slide, X_bar, e, B6, isMiddleThird, q_max, q_min,
                     W5_dry, W5_wet
                 };
-            }, [soil, base, surcharge, geom]);
+            }, [soil, base, surcharge, geom, designLength]);
 
             const handleNum = (setter, field) => (e) => {
                 setter(prev => ({ ...prev, [field]: parseFloat(e.target.value) || 0 }));
@@ -177,7 +179,7 @@
             const GlobalNav = () => (
                 <div className="bg-slate-900 text-slate-300 text-sm py-2 px-4 flex justify-between items-center shadow-md">
                     <div className="flex items-center space-x-2">
-                        <svg className="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002-2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                        <svg className="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                         <span className="font-semibold text-white tracking-wide">STRUCTURAL APPS</span>
                     </div>
                 </div>
@@ -223,11 +225,24 @@
                                 </div>
                             </div>
                             <div>
-                                <h4 className="text-xs font-semibold text-slate-400 uppercase mb-3">น้ำหนักบรรทุก (Load)</h4>
+                                <h4 className="text-xs font-semibold text-slate-400 uppercase mb-3">ทั่วไป & น้ำหนัก (General & Load)</h4>
                                 <div className="space-y-3 text-sm">
                                     <div className="flex justify-between items-center">
-                                        <span className="font-medium text-slate-700">Surcharge (กก./ม.&sup2;)</span>
-                                        <input type="number" className="w-24 p-1.5 border border-slate-300 rounded-md text-right bg-sky-50 focus:outline-none focus:ring-2 focus:ring-blue-500" value={surcharge} onChange={(e) => setSurcharge(parseFloat(e.target.value)||0)} />
+                                        <span className="text-slate-600">ช่วงความยาวออกแบบ (L)</span>
+                                        <div className="flex items-center">
+                                            <input type="number" step="0.1" min="0.1" className="w-16 p-1.5 border border-slate-300 rounded-md text-right focus:outline-none focus:ring-2 focus:ring-blue-500" value={designLength} onChange={(e) => setDesignLength(parseFloat(e.target.value)||1)} />
+                                            <span className="text-slate-600 ml-2">ม.</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 leading-tight border-b border-slate-100 pb-2">
+                                        *สามารถปรับความยาว L เพื่อดูแรงลัพธ์รวมที่กระทำต่อกำแพงได้
+                                    </div>
+                                    <div className="flex justify-between items-center pt-1">
+                                        <span className="font-medium text-slate-700">Surcharge</span>
+                                        <div className="flex items-center">
+                                            <input type="number" className="w-16 p-1.5 border border-slate-300 rounded-md text-right bg-sky-50 focus:outline-none focus:ring-2 focus:ring-blue-500" value={surcharge} onChange={(e) => setSurcharge(parseFloat(e.target.value)||0)} />
+                                            <span className="text-slate-600 ml-2">กก./ม.&sup2;</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -283,13 +298,11 @@
             );
 
             const TabDashboard = () => {
-                // คำนวณ Scale และตำแหน่งสำหรับวาดรูป Dashboard ใหม่ (Overall Behavior)
                 const scaleX = Math.min(300 / calc.B, 120); 
                 const scaleY = Math.min(250 / (geom.H + geom.T1), 100);    
                 const x0 = (600 - (calc.B * scaleX)) / 2;   
                 const y0 = 320; 
 
-                // มิติที่สเกลแล้ว
                 const svgH = geom.H * scaleY;
                 const svgT1 = geom.T1 * scaleY;
                 const svgC = geom.C * scaleX;
@@ -298,31 +311,27 @@
                 const svgF = geom.F * scaleX;
                 const svgB = calc.B * scaleX;
 
-                // พิกัดของรูปโพลีกอนกำแพงกันดิน (ภาพรวม)
-                const p1 = `${x0},${y0}`; // Toe Bot-L
-                const p2 = `${x0 + svgB},${y0}`; // Heel Bot-R
-                const p3 = `${x0 + svgB},${y0 - svgT1}`; // Heel Top-R
-                const p4 = `${x0 + svgC + svgD},${y0 - svgT1}`; // Stem Bot-R
-                const p5 = `${x0 + svgC + svgG},${y0 - svgT1 - svgH}`; // Stem Top-R
-                const p6 = `${x0 + svgC},${y0 - svgT1 - svgH}`; // Stem Top-L
-                const p7 = `${x0 + svgC},${y0 - svgT1}`; // Toe Top-R
-                const p8 = `${x0},${y0 - svgT1}`; // Toe Top-L
+                const p1 = `${x0},${y0}`; 
+                const p2 = `${x0 + svgB},${y0}`; 
+                const p3 = `${x0 + svgB},${y0 - svgT1}`; 
+                const p4 = `${x0 + svgC + svgD},${y0 - svgT1}`; 
+                const p5 = `${x0 + svgC + svgG},${y0 - svgT1 - svgH}`; 
+                const p6 = `${x0 + svgC},${y0 - svgT1 - svgH}`; 
+                const p7 = `${x0 + svgC},${y0 - svgT1}`; 
+                const p8 = `${x0},${y0 - svgT1}`; 
                 const wallPolygon = `${p1} ${p2} ${p3} ${p4} ${p5} ${p6} ${p7} ${p8}`;
 
-                // ตำแหน่งและสเกลกราฟแรงอัด
                 const max_q_value = Math.max(Math.abs(calc.q_max), Math.abs(calc.q_min), 1);
-                const q_scale = 80 / max_q_value; // จำกัดกราฟให้สูงไม่เกิน 80px
+                const q_scale = 80 / max_q_value; 
                 const h_max = calc.q_max * q_scale;
                 const h_min = calc.q_min * q_scale;
 
-                // จุดเซนทรอยด์ของแรง (แขนโมเมนต์)
                 const x_v = x0 + (calc.X_bar * scaleX);
-                const y_bar_P = calc.sumP > 0 ? calc.MO / calc.sumP : 0; // หาจุดศูนย์รวมแรงดันด้านข้าง
+                const y_bar_P = calc.sumP > 0 ? calc.MO / calc.sumP : 0; 
                 const y_p = y0 - (y_bar_P * scaleY);
 
                 return (
                     <div className="space-y-6">
-                        {/* Summary Cards */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
                                 <span className="text-slate-500 text-sm mb-1 font-medium">Overturning (F.S.)</span>
@@ -346,10 +355,8 @@
                             </div>
                         </div>
 
-                        {/* Overall Behavior Diagram */}
                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center overflow-visible">
                             <h4 className="text-lg font-bold text-slate-700 mb-6 w-full text-center border-b pb-2">ไดอะแกรมแรงลัพธ์และแรงอัดใต้ฐานราก (Overall Behavior)</h4>
-                            {/* ปรับขยาย viewBox จาก 600 เป็น 650 เพื่อเพิ่มพื้นที่ฝั่งขวากันข้อความตกขอบ */}
                             <svg viewBox="0 0 650 450" className="w-full max-w-3xl h-auto drop-shadow-sm mx-auto">
                                 <defs>
                                     <pattern id="diagonalHatch" patternUnits="userSpaceOnUse" width="8" height="8">
@@ -360,30 +367,23 @@
                                     </pattern>
                                 </defs>
 
-                                {/* ผิวดินและเส้นฐาน (ปรับ x2 ให้ยาวขึ้นตามขนาดจอ 650) */}
                                 <line x1="20" y1={y0 - svgH - svgT1} x2="630" y2={y0 - svgH - svgT1} stroke="#94a3b8" strokeWidth="2" strokeDasharray="5,5" />
                                 <text x="610" y={y0 - svgH - svgT1 - 8} fill="#64748b" fontSize="12" textAnchor="end">ระดับดิน</text>
 
-                                {/* รูปทรงกำแพงรวม */}
                                 <polygon points={wallPolygon} fill="#e2e8f0" stroke="#64748b" strokeWidth="2" strokeLinejoin="round" />
 
-                                {/* กราฟแรงอัดใต้ฐานราก (Bearing Pressure) */}
-                                {/* แกนอ้างอิง 0 */}
                                 <line x1={x0} y1={y0} x2={x0 + svgB} y2={y0} stroke="#475569" strokeWidth="2" />
                                 
-                                {/* พื้นที่ใต้กราฟ */}
                                 <polygon 
                                     points={`${x0},${y0} ${x0 + svgB},${y0} ${x0 + svgB},${y0 + h_min} ${x0},${y0 + h_max}`}
                                     fill={calc.q_min < 0 ? "url(#tensionHatch)" : "url(#diagonalHatch)"}
                                     stroke={calc.q_min < 0 ? "#a855f7" : "#e11d48"} strokeWidth="1.5"
                                 />
                                 
-                                {/* เส้นขอบกราฟแรงอัด */}
                                 <line x1={x0} y1={y0 + h_max} x2={x0 + svgB} y2={y0 + h_min} stroke="#be123c" strokeWidth="2" />
                                 <line x1={x0} y1={y0} x2={x0} y2={y0 + h_max} stroke="#be123c" strokeWidth="2" />
                                 <line x1={x0 + svgB} y1={y0} x2={x0 + svgB} y2={y0 + h_min} stroke="#be123c" strokeWidth="2" />
 
-                                {/* Text Label แรงอัด */}
                                 <text x={x0 - 8} y={y0 + h_max + (calc.q_max > 0 ? 15 : -5)} fill="#be123c" fontSize="14" fontWeight="bold" textAnchor="end">
                                     q_max = {calc.q_max.toFixed(0)}
                                 </text>
@@ -391,7 +391,7 @@
                                     q_min = {calc.q_min.toFixed(0)} {calc.q_min < 0 && '(Tension)'}
                                 </text>
 
-                                {/* ลูกศรแรงต้านแนวดิ่ง (V) วาดด้วย Polygon ป้องกันบัค */}
+                                {/* ลูกศรแรงต้านแนวดิ่ง (V) */}
                                 <line x1={x_v} y1={y0 - svgH - svgT1 - 60} x2={x_v} y2={y0 - 35} stroke="#10b981" strokeWidth="4" strokeDasharray="6,4" />
                                 <polygon points={`${x_v - 8},${y0 - 36} ${x_v + 8},${y0 - 36} ${x_v},${y0 - 20}`} fill="#10b981" />
                                 <circle cx={x_v} cy={y0} r="4" fill="#10b981" />
@@ -402,7 +402,7 @@
                                     (X&#772; = {calc.X_bar.toFixed(2)}m)
                                 </text>
 
-                                {/* ลูกศรแรงผลักด้านข้าง (P) วาดด้วย Polygon ให้ปลายชนขอบกำแพงเป๊ะๆ */}
+                                {/* ลูกศรแรงผลักด้านข้าง (P) */}
                                 <line x1={x0 + svgB + 100} y1={y_p} x2={x0 + svgB + 15} y2={y_p} stroke="#0ea5e9" strokeWidth="4" />
                                 <polygon points={`${x0 + svgB + 16},${y_p - 8} ${x0 + svgB + 16},${y_p + 8} ${x0 + svgB},${y_p}`} fill="#0ea5e9" />
                                 <text x={x0 + svgB + 55} y={y_p - 12} fill="#0369a1" fontSize="16" fontWeight="bold" textAnchor="middle">
@@ -412,7 +412,7 @@
                                     (y&#772; = {y_bar_P.toFixed(2)}m)
                                 </text>
 
-                                {/* ระยะเยื้องศูนย์ e และกึ่งกลางฐาน เลื่อนลงมาใต้กราฟแรงอัดเพื่อไม่ให้ทับกับลายเส้น */}
+                                {/* ระยะเยื้องศูนย์ e และกึ่งกลางฐาน */}
                                 <line x1={x0 + svgB/2} y1={y0} x2={x0 + svgB/2} y2={y0 + 105} stroke="#64748b" strokeWidth="1" strokeDasharray="3,3" />
                                 <text x={x0 + svgB/2} y={y0 + 120} fill="#64748b" fontSize="12" textAnchor="middle">B/2 ({(calc.B/2).toFixed(2)}m)</text>
 
@@ -422,7 +422,6 @@
                                 {Math.abs(calc.e) > 0.05 && (
                                     <g>
                                         <line x1={x0 + svgB/2} y1={y0 + 95} x2={x_v} y2={y0 + 95} stroke="#f59e0b" strokeWidth="2" />
-                                        {/* ขีดเส้นตั้งปิดหัวท้ายให้ดูเป็น Dimension ชัดเจน */}
                                         <line x1={x0 + svgB/2} y1={y0 + 90} x2={x0 + svgB/2} y2={y0 + 100} stroke="#f59e0b" strokeWidth="2" />
                                         <line x1={x_v} y1={y0 + 90} x2={x_v} y2={y0 + 100} stroke="#f59e0b" strokeWidth="2" />
                                         <text x={(x0 + svgB/2 + x_v)/2} y={y0 + 88} fill="#d97706" fontSize="13" fontWeight="bold" textAnchor="middle">e = {calc.e.toFixed(3)}</text>
@@ -649,7 +648,7 @@
                             <thead>
                                 <tr className="border-b border-slate-300">
                                     <th className="py-2">รายการ</th>
-                                    <th>สมการ P (กก./ม.)</th>
+                                    <th>สมการ P (กก.)</th>
                                     <th>แรง (P)</th>
                                     <th>แขน (y)</th>
                                     <th>โมเมนต์ (M<Sub text="O"/>)</th>
@@ -658,35 +657,35 @@
                             <tbody>
                                 <tr className="border-b border-slate-100">
                                     <td className="py-2">P<Sub text="1"/> (Surcharge)</td>
-                                    <td>p1 &times; (H+T1)</td>
+                                    <td>p1 &times; (H+T1) &times; L</td>
                                     <td>{calc.P1.toFixed(2)}</td>
                                     <td>{calc.y1.toFixed(2)}</td>
                                     <td>{(calc.P1 * calc.y1).toFixed(2)}</td>
                                 </tr>
                                 <tr className="border-b border-slate-100">
                                     <td className="py-2">P<Sub text="2"/> (ดินแห้ง-สามเหลี่ยม)</td>
-                                    <td>&frac12; &times; p2 &times; d2</td>
+                                    <td>&frac12; &times; p2 &times; d2 &times; L</td>
                                     <td>{calc.P2_tri.toFixed(2)}</td>
                                     <td>{calc.y2_tri.toFixed(2)}</td>
                                     <td>{(calc.P2_tri * calc.y2_tri).toFixed(2)}</td>
                                 </tr>
                                 <tr className="border-b border-slate-100">
                                     <td className="py-2">P<Sub text="2"/> (ดินแห้ง-สี่เหลี่ยม)</td>
-                                    <td>p2 &times; (d3+T1)</td>
+                                    <td>p2 &times; (d3+T1) &times; L</td>
                                     <td>{calc.P2_rect.toFixed(2)}</td>
                                     <td>{calc.y2_rect.toFixed(2)}</td>
                                     <td>{(calc.P2_rect * calc.y2_rect).toFixed(2)}</td>
                                 </tr>
                                 <tr className="border-b border-slate-100">
                                     <td className="py-2">P<Sub text="3"/> (ดินจมน้ำ)</td>
-                                    <td>&frac12; &times; p3 &times; (d3+T1)</td>
+                                    <td>&frac12; &times; p3 &times; (d3+T1) &times; L</td>
                                     <td>{calc.P3.toFixed(2)}</td>
                                     <td>{calc.y3.toFixed(2)}</td>
                                     <td>{(calc.P3 * calc.y3).toFixed(2)}</td>
                                 </tr>
                                 <tr className="border-b border-slate-200">
                                     <td className="py-2">P<Sub text="4"/> (น้ำ)</td>
-                                    <td>&frac12; &times; p4 &times; (d3+T1)</td>
+                                    <td>&frac12; &times; p4 &times; (d3+T1) &times; L</td>
                                     <td>{calc.P4.toFixed(2)}</td>
                                     <td>{calc.y4.toFixed(2)}</td>
                                     <td>{(calc.P4 * calc.y4).toFixed(2)}</td>
@@ -705,7 +704,6 @@
             };
 
             const TabResisting = () => {
-                // ปรับขยาย Scale และระยะ X0 ให้กว้างขึ้นเพื่อป้องกันตัวหนังสือตกขอบซ้าย/ขวา
                 const scaleX = Math.min(500 / calc.B, 150); 
                 const scaleY = 250 / (geom.H + geom.T1);    
                 const x0 = (750 - (calc.B * scaleX)) / 2;   
@@ -747,9 +745,7 @@
                     <div className="flex flex-col gap-6 mt-4">
                         <div className="bg-slate-50 rounded-xl flex flex-col items-center justify-center p-6 border border-slate-200 overflow-visible">
                             <h4 className="text-base font-semibold text-slate-700 mb-4 w-full text-center">สัดส่วนพื้นที่หน้าตัด และ Dimensions (ไดอะแกรม)</h4>
-                            {/* ปรับขยาย viewBox เป็น 750 และขยายความกว้างสูงสุด (max-w-3xl) */}
                             <svg viewBox="0 0 750 450" className="w-full max-w-3xl h-auto drop-shadow-sm mx-auto">
-                                {/* ปรับเส้นแนวดินให้ลากยาวครอบคลุมจอใหม่ */}
                                 <line x1="20" y1={y0 - svgH - svgT1} x2="730" y2={y0 - svgH - svgT1} stroke="#94a3b8" strokeWidth="2" strokeDasharray="5,5" />
                                 
                                 <rect x={x0} y={y0 - svgT1} width={svgC} height={svgT1} fill="#94a3b8" stroke="#475569" strokeWidth="1" />
@@ -819,7 +815,6 @@
                                     {geom.G > 0 && <line x1={x0 + svgC + svgG} y1={y0 - svgT1 - svgH - 45} x2={x0 + svgC + svgG} y2={y0 - svgT1 - svgH - 35} />}
                                     {calc.m > 0 && <line x1={x0 + svgC + svgD} y1={y0 - svgT1 - svgH - 45} x2={x0 + svgC + svgD} y2={y0 - svgT1 - svgH - 35} />}
                                 </g>
-                                {/* ปรับตำแหน่ง G และ m ให้แยกซ้ายขวาเพื่อไม่ให้ทับกัน */}
                                 <g fill="#475569" fontSize="13" fontFamily="sans-serif">
                                     {geom.G > 0 && <text x={calc.m > 0 ? (x0 + svgC + svgG - 5) : (x0 + svgC + svgG/2)} y={y0 - svgT1 - svgH - 50} textAnchor={calc.m > 0 ? "end" : "middle"}>G={geom.G}</text>}
                                     {calc.m > 0 && <text x={geom.G > 0 ? (x0 + svgC + svgG + 5) : (x0 + svgC + svgD/2)} y={y0 - svgT1 - svgH - 50} textAnchor={geom.G > 0 ? "start" : "middle"}>m={calc.m.toFixed(2)}</text>}
@@ -861,7 +856,7 @@
                                         <tr className="border-b border-slate-300">
                                             <th className="py-2">รายการ</th>
                                             <th>สมการคำนวณน้ำหนัก</th>
-                                            <th>น้ำหนัก (W)</th>
+                                            <th>น้ำหนัก (W) กก.</th>
                                             <th>แขน (x)</th>
                                             <th>โมเมนต์ (M<Sub text="R"/>)</th>
                                         </tr>
@@ -869,56 +864,56 @@
                                     <tbody>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#94a3b8] mr-2 border border-[#475569]"></span>W<Sub text="1"/>: ฐานรากส่วน Toe</td>
-                                            <td>C &times; T1 &times; 2400</td>
+                                            <td>C &times; T1 &times; 2400 &times; L</td>
                                             <td>{calc.w1.toFixed(2)}</td>
                                             <td>{calc.x1.toFixed(2)}</td>
                                             <td>{(calc.w1 * calc.x1).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#e2e8f0] mr-2 border border-[#475569]"></span>W<Sub text="2"/>: กำแพงส่วนสี่เหลี่ยม</td>
-                                            <td>G &times; H &times; 2400</td>
+                                            <td>G &times; H &times; 2400 &times; L</td>
                                             <td>{calc.w2.toFixed(2)}</td>
                                             <td>{calc.x2.toFixed(2)}</td>
                                             <td>{(calc.w2 * calc.x2).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#f1f5f9] mr-2 border border-[#475569]"></span>W<Sub text="3"/>: กำแพงส่วนสามเหลี่ยม</td>
-                                            <td>&frac12; &times; m &times; H &times; 2400</td>
+                                            <td>&frac12; &times; m &times; H &times; 2400 &times; L</td>
                                             <td>{calc.w3.toFixed(2)}</td>
                                             <td>{calc.x3.toFixed(2)}</td>
                                             <td>{(calc.w3 * calc.x3).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#cbd5e1] mr-2 border border-[#475569]"></span>W<Sub text="4"/>: ฐานรากส่วน Stem+Heel</td>
-                                            <td>(D + F) &times; T1 &times; 2400</td>
+                                            <td>(D + F) &times; T1 &times; 2400 &times; L</td>
                                             <td>{calc.w4.toFixed(2)}</td>
                                             <td>{calc.x4.toFixed(2)}</td>
                                             <td>{(calc.w4 * calc.x4).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#fde68a] mr-2 border border-[#d97706]"></span>W<Sub text="5"/>: ดินบนกำแพงเหนือ Stem</td>
-                                            <td>W<Sub text="dry"/> + W<Sub text="wet"/> บนระยะ m</td>
+                                            <td>(W<Sub text="dry"/> + W<Sub text="wet"/>) &times; L</td>
                                             <td>{calc.w5.toFixed(2)}</td>
                                             <td>{calc.x5.toFixed(2)}</td>
                                             <td>{(calc.w5 * calc.x5).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#fcd34d] mr-2 border border-[#d97706]"></span>W<Sub text="6"/>: ดินแห้งบน Heel</td>
-                                            <td>F &times; d2 &times; &gamma;<Sub text="compact"/></td>
+                                            <td>F &times; d2 &times; &gamma;<Sub text="compact"/> &times; L</td>
                                             <td>{calc.w6.toFixed(2)}</td>
                                             <td>{calc.x6.toFixed(2)}</td>
                                             <td>{(calc.w6 * calc.x6).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#93c5fd] mr-2 border border-[#2563eb]"></span>W<Sub text="7"/>: ดินเปียกบน Heel</td>
-                                            <td>F &times; d3 &times; &gamma;<Sub text="sat"/></td>
+                                            <td>F &times; d3 &times; &gamma;<Sub text="sat"/> &times; L</td>
                                             <td>{calc.w7.toFixed(2)}</td>
                                             <td>{calc.x7.toFixed(2)}</td>
                                             <td>{(calc.w7 * calc.x7).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-200">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#e0f2fe] mr-2 border border-[#0ea5e9]"></span>W<Sub text="8"/>: Surcharge บนดินถม</td>
-                                            <td>Surcharge &times; (m + F)</td>
+                                            <td>Surcharge &times; (m + F) &times; L</td>
                                             <td>{calc.w8.toFixed(2)}</td>
                                             <td>{calc.x8.toFixed(2)}</td>
                                             <td>{(calc.w8 * calc.x8).toFixed(2)}</td>
@@ -945,8 +940,8 @@
                     <div className="bg-sky-50 text-sky-800 p-4 rounded mb-6 text-sm font-medium grid grid-cols-2 md:grid-cols-5 gap-3 border border-sky-100 shadow-sm">
                         <div>&Sigma;M<Sub text="R"/> = {calc.MR.toFixed(2)} กก.-ม.</div>
                         <div>&Sigma;M<Sub text="O"/> = {calc.MO.toFixed(2)} กก.-ม.</div>
-                        <div>&Sigma;V = {calc.sumV.toFixed(2)} กก./ม.</div>
-                        <div>&Sigma;P = {calc.sumP.toFixed(2)} กก./ม.</div>
+                        <div>&Sigma;V = {calc.sumV.toFixed(2)} กก.</div>
+                        <div>&Sigma;P = {calc.sumP.toFixed(2)} กก.</div>
                         <div>f (แรงเสียดทาน) = {base.f.toFixed(2)}</div>
                     </div>
 
@@ -985,7 +980,7 @@
                     <div className="bg-sky-50 text-sky-800 p-4 rounded mb-6 text-sm font-medium grid grid-cols-2 md:grid-cols-5 gap-3 border border-sky-100 shadow-sm">
                         <div>&Sigma;M<Sub text="R"/> = {calc.MR.toFixed(2)} กก.-ม.</div>
                         <div>&Sigma;M<Sub text="O"/> = {calc.MO.toFixed(2)} กก.-ม.</div>
-                        <div>&Sigma;V = {calc.sumV.toFixed(2)} กก./ม.</div>
+                        <div>&Sigma;V = {calc.sumV.toFixed(2)} กก.</div>
                         <div>B (กว้างฐาน) = {calc.B.toFixed(2)} ม.</div>
                         <div>q<Sub text="allow"/> = {base.q_allow} กก./ม.&sup2;</div>
                     </div>
@@ -1022,26 +1017,26 @@
                             <div>
                                 <div className="flex items-center space-x-2 mb-2 text-rose-700 font-semibold">
                                     <span>q<Sub text="max"/> =</span>
-                                    <Fraction top={<span>&Sigma;V</span>} bottom={<span>B</span>} />
+                                    <Fraction top={<span>&Sigma;V</span>} bottom={<span>B &times; L</span>} />
                                     <span>&times; (1 + </span>
                                     <Fraction top={<span>6e</span>} bottom={<span>B</span>} />
                                     <span>)</span>
                                 </div>
                                 <div>
-                                    q<Sub text="max"/> = ({calc.sumV.toFixed(2)} / {calc.B.toFixed(2)}) &times; (1 + (6 &times; {Math.abs(calc.e).toFixed(3)} / {calc.B.toFixed(2)}))<br/>
+                                    q<Sub text="max"/> = ({calc.sumV.toFixed(2)} / ({calc.B.toFixed(2)} &times; {calc.L.toFixed(2)})) &times; (1 + (6 &times; {Math.abs(calc.e).toFixed(3)} / {calc.B.toFixed(2)}))<br/>
                                     q<Sub text="max"/> = <strong className="text-lg text-rose-700">{calc.q_max.toFixed(2)} กก./ม.&sup2;</strong>
                                 </div>
                             </div>
                             <div>
                                 <div className="flex items-center space-x-2 mb-2 text-emerald-700 font-semibold">
                                     <span>q<Sub text="min"/> =</span>
-                                    <Fraction top={<span>&Sigma;V</span>} bottom={<span>B</span>} />
+                                    <Fraction top={<span>&Sigma;V</span>} bottom={<span>B &times; L</span>} />
                                     <span>&times; (1 - </span>
                                     <Fraction top={<span>6e</span>} bottom={<span>B</span>} />
                                     <span>)</span>
                                 </div>
                                 <div>
-                                    q<Sub text="min"/> = ({calc.sumV.toFixed(2)} / {calc.B.toFixed(2)}) &times; (1 - (6 &times; {Math.abs(calc.e).toFixed(3)} / {calc.B.toFixed(2)}))<br/>
+                                    q<Sub text="min"/> = ({calc.sumV.toFixed(2)} / ({calc.B.toFixed(2)} &times; {calc.L.toFixed(2)})) &times; (1 - (6 &times; {Math.abs(calc.e).toFixed(3)} / {calc.B.toFixed(2)}))<br/>
                                     q<Sub text="min"/> = <strong className="text-lg text-emerald-700">{calc.q_min.toFixed(2)} กก./ม.&sup2;</strong>
                                 </div>
                             </div>
