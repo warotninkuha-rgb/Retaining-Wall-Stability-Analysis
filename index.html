@@ -61,9 +61,9 @@
             </div>
         );
 
-        const StepBox = ({ title, children }) => (
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4 print:break-inside-avoid">
-                <h4 className="font-semibold text-slate-700 mb-2">{title}</h4>
+        const StepBox = ({ title, children, className="" }) => (
+            <div className={`bg-slate-50 border border-slate-200 rounded-lg p-5 mb-5 print:break-inside-avoid shadow-sm ${className}`}>
+                <h4 className="font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2">{title}</h4>
                 <div className="text-slate-600 text-sm overflow-x-auto overflow-y-hidden">{children}</div>
             </div>
         );
@@ -78,22 +78,22 @@
 
         // Custom Input Component for standardizing layout
         const InputRow = ({ label, value, onChange, unit, warning, bgClass = "" }) => (
-            <div className={`flex items-center justify-between py-1.5 px-2 rounded-md transition-colors hover:bg-slate-50 ${bgClass}`}>
-                <span className="text-slate-700 text-sm whitespace-nowrap mr-3 flex-shrink-0">{label}</span>
+            <div className={`flex items-center justify-between py-2 px-3 rounded-md transition-colors border border-transparent hover:border-slate-200 hover:bg-slate-50 ${bgClass}`}>
+                <span className="text-slate-700 text-sm mr-2 flex-grow leading-tight">{label}</span>
                 <div className="flex items-center flex-shrink-0">
                     {warning && <span className="text-rose-500 text-xs mr-2 whitespace-nowrap no-print">{warning}</span>}
                     <input 
                         type="number" step="0.01" 
-                        className="w-20 p-1.5 border border-slate-300 rounded text-center focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm bg-white" 
+                        className="w-20 sm:w-24 p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm bg-white shadow-sm" 
                         value={value} onChange={onChange} 
                     />
-                    <span className="text-slate-500 ml-2 text-sm w-4">{unit}</span>
+                    <span className="text-slate-500 ml-2 text-sm w-6 text-left">{unit}</span>
                 </div>
             </div>
         );
 
         const App = () => {
-            const [activeTab, setActiveTab] = useState('summary'); // Set Summary as default
+            const [activeTab, setActiveTab] = useState('summary');
 
             // Global Inputs State
             const [soil, setSoil] = useState({ gamma_c: 1900, gamma_sat: 2100, phi: 30 });
@@ -101,17 +101,17 @@
             const [surcharge, setSurcharge] = useState(500);
             const [designLength, setDesignLength] = useState(1.0);
             
-            // Geometry State (Defaults updated to match screenshot)
+            // Geometry State
             const [geom, setGeom] = useState({ H: 2.0, C: 0.0, D: 0.6, G: 0.25, F: 2.0, T1: 0.3, waterDepth: 1.5 });
 
             // Pile Foundation State
             const [pile, setPile] = useState({
-                usePiles: false,
+                usePiles: true,
                 designMode: 'excess', // 'full' or 'excess'
-                spacingL: 2.0,       // ระยะห่างเสาเข็มแนวยาวกำแพง (m)
-                allowComp: 35000,    // Allowable Compression (kg/pile)
-                allowTen: 10500,     // Allowable Tension (kg/pile)
-                allowShear: 2500     // Allowable Shear (kg/pile)
+                spacingL: 2.0,       
+                allowComp: 35000,    
+                allowTen: 10500,     
+                allowShear: 2500     
             });
             const [pileRows, setPileRows] = useState([0.4, 2.1]); 
 
@@ -324,16 +324,16 @@
             const GlobalInputs = () => (
                 <div className="mb-6 space-y-4 print:mb-4 print:space-y-3">
                     {/* Box 1: มิติโครงสร้าง */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:p-4">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:p-4 print:break-inside-avoid">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-3 mb-4 print:mb-3">
                             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 sm:mb-0">มิติโครงสร้างกำแพงกันดิน (Wall Dimensions)</h3>
-                            <span className="text-xs text-slate-600 font-medium bg-slate-100 print:bg-transparent px-3 py-1 rounded-full">ความกว้างฐานรวม (B) = <span className="font-bold text-blue-600">{calc.B.toFixed(2)} ม.</span></span>
+                            <span className="text-xs text-slate-600 font-medium bg-slate-100 print:bg-transparent px-3 py-1 rounded-full border border-slate-200 print:border-none">ความกว้างฐานรวม (B) = <span className="font-bold text-blue-600">{calc.B.toFixed(2)} ม.</span></span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-x-6 gap-y-2">
                             <InputRow label="สูง (H)" value={geom.H} onChange={handleNum(setGeom, 'H')} unit="ม." />
                             <InputRow label="ยื่นหน้า Toe (C)" value={geom.C} onChange={handleNum(setGeom, 'C')} unit="ม." />
                             <InputRow label="กว้างยอดกำแพง (G)" value={geom.G} onChange={handleNum(setGeom, 'G')} unit="ม." />
-                            <InputRow label="ระดับน้ำจากผิวดิน" value={geom.waterDepth} onChange={handleNum(setGeom, 'waterDepth')} unit="ม." bgClass="bg-blue-50 border border-blue-100 print:bg-transparent print:border-none" />
+                            <InputRow label="ระดับน้ำจากผิวดิน" value={geom.waterDepth} onChange={handleNum(setGeom, 'waterDepth')} unit="ม." bgClass="bg-blue-50 border-blue-100 print:bg-transparent print:border-transparent" />
                             <InputRow label="หนาฐาน (T1)" value={geom.T1} onChange={handleNum(setGeom, 'T1')} unit="ม." />
                             <InputRow label="กว้างฐานล่าง (D)" value={geom.D} onChange={handleNum(setGeom, 'D')} unit="ม." />
                             <InputRow label="ยื่นหลัง Heel (F)" value={geom.F} onChange={handleNum(setGeom, 'F')} unit="ม." />
@@ -341,22 +341,22 @@
                     </div>
 
                     {/* Box 2: พารามิเตอร์ดิน */}
-                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:p-4">
+                    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:p-4 print:break-inside-avoid">
                         <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3 print:mb-3">พารามิเตอร์การออกแบบดินและน้ำหนัก (Soil & Load Parameters)</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-x-6 gap-y-2">
-                            <InputRow label={<span>&gamma;<Sub text="c"/> (กดทับ)</span>} value={soil.gamma_c} onChange={handleNum(setSoil, 'gamma_c')} unit="กก./ม.&sup3;" />
-                            <InputRow label={<span>&gamma;<Sub text="sat"/> (อิ่มตัว)</span>} value={soil.gamma_sat} onChange={handleNum(setSoil, 'gamma_sat')} unit="กก./ม.&sup3;" />
+                            <InputRow label={<span>&gamma;<Sub text="c"/> (กดทับ)</span>} value={soil.gamma_c} onChange={handleNum(setSoil, 'gamma_c')} unit={<span>กก./<br/>ม.&sup3;</span>} />
+                            <InputRow label={<span>&gamma;<Sub text="sat"/> (อิ่มตัว)</span>} value={soil.gamma_sat} onChange={handleNum(setSoil, 'gamma_sat')} unit={<span>กก./<br/>ม.&sup3;</span>} />
                             <InputRow label={<span>มุมเสียดทาน &phi;</span>} value={soil.phi} onChange={handleNum(setSoil, 'phi')} unit="องศา" warning={(soil.phi < 15 || soil.phi > 45) ? "ค่าแปลก" : null} />
                             <InputRow label="ความยาวคำนวณ (L)" value={designLength} onChange={(e) => setDesignLength(parseFloat(e.target.value)||1)} unit="ม." />
                             
                             <InputRow label="สัมประสิทธิ์ไถล (f)" value={base.f} onChange={handleNum(setBase, 'f')} unit="" />
-                            <InputRow label={<span>q<Sub text="allow"/> ดินเดิม</span>} value={base.q_allow} onChange={handleNum(setBase, 'q_allow')} unit="กก./ม.&sup2;" />
-                            <InputRow label="Surcharge (จร)" value={surcharge} onChange={(e) => setSurcharge(parseFloat(e.target.value)||0)} unit="กก./ม.&sup2;" bgClass="bg-amber-50 border border-amber-100 print:bg-transparent print:border-none" />
+                            <InputRow label={<span>q<Sub text="allow"/> ดินเดิม</span>} value={base.q_allow} onChange={handleNum(setBase, 'q_allow')} unit={<span>กก./<br/>ม.&sup2;</span>} />
+                            <InputRow label="Surcharge (จร)" value={surcharge} onChange={(e) => setSurcharge(parseFloat(e.target.value)||0)} unit={<span>กก./<br/>ม.&sup2;</span>} bgClass="bg-amber-50 border-amber-100 print:bg-transparent print:border-transparent" />
                         </div>
                     </div>
 
                     {/* Box 3: ระบบฐานรากเสาเข็ม (Pile Foundation) */}
-                    <div className="bg-white rounded-xl shadow-sm border border-indigo-200 p-5 print:p-4">
+                    <div className="bg-white rounded-xl shadow-sm border-t-4 border-indigo-500 border-x border-b border-slate-200 p-5 print:p-4 print:break-inside-avoid">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-indigo-100 pb-3 mb-4 print:mb-3">
                             <label className="flex items-center space-x-3 cursor-pointer">
                                 <input 
@@ -373,25 +373,25 @@
                         {pile.usePiles && (
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 print:gap-6 animate-[fadeIn_0.3s_ease-in-out]">
                                 {/* Left Column: Coordinates */}
-                                <div>
-                                    <h4 className="text-sm font-semibold text-slate-600 mb-3 bg-slate-50 p-2 rounded print:bg-transparent print:p-0">1. พิกัดจัดวางเสาเข็ม (Coordinates)</h4>
+                                <div className="bg-slate-50 print:bg-transparent p-4 print:p-0 rounded-lg border border-slate-100 print:border-none">
+                                    <h4 className="text-sm font-bold text-slate-700 mb-4 print:mb-2 border-b pb-2 print:border-none print:pb-0">1. พิกัดจัดวางเสาเข็ม (Coordinates)</h4>
                                     <div className="space-y-2">
                                         <InputRow label={<span>ระยะห่างตามแนวยาว (S<Sub text="L"/>)</span>} value={pile.spacingL} onChange={handlePileNum('spacingL')} unit="ม." />
                                         
                                         {pileRows.map((x, i) => (
-                                            <div key={i} className="flex items-center justify-between py-1.5 px-2 hover:bg-slate-50 rounded-md transition-colors">
-                                                <span className="text-slate-700 text-sm whitespace-nowrap mr-3 flex-shrink-0">แถว {i+1} ห่างจาก Toe (x<Sub text={i+1}/>)</span>
+                                            <div key={i} className="flex items-center justify-between py-2 px-3 hover:bg-white rounded-md transition-colors border border-transparent hover:border-slate-200 shadow-sm hover:shadow">
+                                                <span className="text-slate-700 text-sm mr-3 flex-grow leading-tight">แถว {i+1} ห่างจาก Toe (x<Sub text={i+1}/>)</span>
                                                 <div className="flex items-center flex-shrink-0">
-                                                    <input type="number" step="0.01" className="w-20 p-1.5 border border-indigo-200 rounded text-center focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm" value={x} onChange={(e) => updatePileRow(i, e.target.value)} />
-                                                    <span className="text-slate-500 ml-2 mr-2 text-sm w-4">ม.</span>
-                                                    <button onClick={() => removePileRow(i)} className="text-rose-400 hover:text-rose-600 bg-rose-50 hover:bg-rose-100 p-1.5 rounded transition no-print" title="ลบแถวนี้">
+                                                    <input type="number" step="0.01" className="w-20 sm:w-24 p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm bg-white" value={x} onChange={(e) => updatePileRow(i, e.target.value)} />
+                                                    <span className="text-slate-500 mx-2 text-sm w-4">ม.</span>
+                                                    <button onClick={() => removePileRow(i)} className="text-rose-400 hover:text-rose-600 bg-rose-50 hover:bg-rose-100 p-1.5 rounded transition no-print flex-shrink-0" title="ลบแถวนี้">
                                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                                                     </button>
                                                 </div>
                                             </div>
                                         ))}
-                                        <div className="px-2 pt-2">
-                                            <button onClick={addPileRow} className="w-full py-2 border border-dashed border-indigo-300 text-indigo-600 rounded-md hover:bg-indigo-50 transition text-xs font-medium no-print">
+                                        <div className="px-2 pt-3">
+                                            <button onClick={addPileRow} className="w-full py-2 border border-dashed border-indigo-300 text-indigo-600 rounded-md hover:bg-indigo-50 transition text-xs font-bold no-print">
                                                 + เพิ่มแถวเสาเข็ม (แกน X)
                                             </button>
                                         </div>
@@ -400,9 +400,9 @@
 
                                 {/* Right Column: Properties & Assumptions */}
                                 <div>
-                                    <div className="bg-slate-50 print:bg-transparent p-3 print:p-0 rounded-lg mb-6">
-                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-                                            <h4 className="text-sm font-semibold text-slate-600">2. กำลังรับน้ำหนักปลอดภัย (Allowable Capacity)</h4>
+                                    <div className="bg-slate-50 print:bg-transparent p-4 print:p-0 rounded-lg mb-6 border border-slate-100 print:border-none">
+                                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 border-b border-slate-200 pb-2 print:border-none print:pb-0">
+                                            <h4 className="text-sm font-bold text-slate-700">2. กำลังรับน้ำหนักปลอดภัย (Allowable Capacity)</h4>
                                             <select className="mt-2 sm:mt-0 text-xs p-1.5 border border-indigo-200 rounded text-indigo-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 no-print" value={pileType} onChange={handlePileTypeChange}>
                                                 {Object.entries(pileProfiles).map(([k, v]) => (
                                                     <option key={k} value={k}>{v.name}</option>
@@ -411,30 +411,30 @@
                                         </div>
                                         
                                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                            <div className="flex flex-col space-y-1">
-                                                <span className="text-slate-500 text-xs">แรงกด (Compression)</span>
-                                                <div className="flex items-center"><input type="number" className="w-full p-1.5 border border-indigo-200 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm" value={pile.allowComp} onChange={handlePileNum('allowComp')} /><span className="text-slate-400 ml-2 text-xs w-4">kg</span></div>
+                                            <div className="flex flex-col space-y-1 bg-white print:bg-transparent p-2 rounded border border-slate-100 print:border-none">
+                                                <span className="text-slate-500 text-xs font-semibold text-center mb-1">แรงกด (Compression)</span>
+                                                <div className="flex items-center"><input type="number" className="w-full p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm shadow-sm" value={pile.allowComp} onChange={handlePileNum('allowComp')} /><span className="text-slate-400 ml-2 text-xs w-4">kg</span></div>
                                             </div>
-                                            <div className="flex flex-col space-y-1">
-                                                <span className="text-slate-500 text-xs">แรงถอน (Tension)</span>
-                                                <div className="flex items-center"><input type="number" className="w-full p-1.5 border border-indigo-200 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm" value={pile.allowTen} onChange={handlePileNum('allowTen')} /><span className="text-slate-400 ml-2 text-xs w-4">kg</span></div>
+                                            <div className="flex flex-col space-y-1 bg-white print:bg-transparent p-2 rounded border border-slate-100 print:border-none">
+                                                <span className="text-slate-500 text-xs font-semibold text-center mb-1">แรงถอน (Tension)</span>
+                                                <div className="flex items-center"><input type="number" className="w-full p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm shadow-sm" value={pile.allowTen} onChange={handlePileNum('allowTen')} /><span className="text-slate-400 ml-2 text-xs w-4">kg</span></div>
                                             </div>
-                                            <div className="flex flex-col space-y-1">
-                                                <span className="text-slate-500 text-xs">แรงเฉือน (Shear)</span>
-                                                <div className="flex items-center"><input type="number" className="w-full p-1.5 border border-indigo-200 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm" value={pile.allowShear} onChange={handlePileNum('allowShear')} /><span className="text-slate-400 ml-2 text-xs w-4">kg</span></div>
+                                            <div className="flex flex-col space-y-1 bg-white print:bg-transparent p-2 rounded border border-slate-100 print:border-none">
+                                                <span className="text-slate-500 text-xs font-semibold text-center mb-1">แรงเฉือน (Shear)</span>
+                                                <div className="flex items-center"><input type="number" className="w-full p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm shadow-sm" value={pile.allowShear} onChange={handlePileNum('allowShear')} /><span className="text-slate-400 ml-2 text-xs w-4">kg</span></div>
                                             </div>
                                         </div>
                                     </div>
 
                                     {/* Design Assumption */}
-                                    <div className="bg-slate-50 print:bg-transparent p-3 print:p-0 rounded-lg">
-                                        <h4 className="text-sm font-semibold text-slate-600 mb-3">3. สมมติฐานการรับแรง (Design Assumption)</h4>
+                                    <div className="bg-slate-50 print:bg-transparent p-4 print:p-0 rounded-lg border border-slate-100 print:border-none">
+                                        <h4 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2 print:border-none print:pb-0">3. สมมติฐานการรับแรง (Design Assumption)</h4>
                                         <div className="space-y-2">
-                                            <label className="flex items-center space-x-2 text-sm cursor-pointer hover:bg-slate-100 print:hover:bg-transparent p-1.5 print:p-0 rounded transition">
+                                            <label className="flex items-center space-x-2 text-sm cursor-pointer hover:bg-white p-2 rounded border border-transparent hover:border-slate-200 shadow-sm transition print:shadow-none print:border-none print:p-0">
                                                 <input type="radio" name="designMode" value="excess" checked={pile.designMode === 'excess'} onChange={() => setPile(prev => ({...prev, designMode: 'excess'}))} className="accent-indigo-600 w-4 h-4" />
                                                 <span className="text-slate-700 font-medium">รับเฉพาะส่วนเกิน (Excess Forces Only)</span>
                                             </label>
-                                            <label className="flex items-center space-x-2 text-sm cursor-pointer hover:bg-slate-100 print:hover:bg-transparent p-1.5 print:p-0 rounded transition">
+                                            <label className="flex items-center space-x-2 text-sm cursor-pointer hover:bg-white p-2 rounded border border-transparent hover:border-slate-200 shadow-sm transition print:shadow-none print:border-none print:p-0">
                                                 <input type="radio" name="designMode" value="full" checked={pile.designMode === 'full'} onChange={() => setPile(prev => ({...prev, designMode: 'full'}))} className="accent-indigo-600 w-4 h-4" />
                                                 <span className="text-slate-700 font-medium">รับแรงทั้งหมด (Full Load - Elastic Center)</span>
                                             </label>
@@ -521,7 +521,7 @@
                 const planY0 = 50;
 
                 return (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4 mt-6 print:mt-0">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4 mt-6 print:mt-0 animate-[fadeIn_0.3s_ease-in-out]">
                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-start overflow-visible print:break-inside-avoid">
                             <h4 className="text-lg font-bold text-slate-700 mb-6 w-full text-center border-b pb-2">ไดอะแกรมรูปด้าน (Elevation)</h4>
                             <svg viewBox="0 0 650 450" className="w-full max-w-lg h-auto drop-shadow-sm mx-auto">
@@ -562,7 +562,6 @@
 
                                 {pile.usePiles && pileRows.map((x, i) => (
                                     <g key={i}>
-                                        {/* วาดเสาเข็มจำลองในรูป Elevation */}
                                         <rect x={x0 + x * scaleX - 10} y={y0} width="20" height="60" fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
                                         <path d={`M ${x0 + x * scaleX - 10} ${y0 + 60} L ${x0 + x * scaleX} ${y0 + 80} L ${x0 + x * scaleX + 10} ${y0 + 60} Z`} fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
                                     </g>
@@ -604,7 +603,7 @@
                                         </marker>
                                     </defs>
 
-                                    {/* พื้นที่ฐานราก (จากมุมมองด้านบน) */}
+                                    {/* พื้นที่ฐานราก */}
                                     <rect x={planX0} y={planY0} width={planW} height={planH} fill="#f1f5f9" stroke="#475569" strokeWidth="2" rx="4" />
                                     
                                     {/* เส้นขอบแนวกำแพง */}
@@ -683,7 +682,7 @@
                 const y_P4 = y_WT + svgD3_T1 * 2 / 3 + (svgD3_T1 > 40 ? 15 : 0);
 
                 return (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:space-y-4 print:break-inside-avoid">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:space-y-4 print:break-inside-avoid animate-[fadeIn_0.3s_ease-in-out]">
                     <h3 className="font-bold text-lg text-slate-700 border-b pb-2">แรงผลักด้านข้าง (Driving Forces)</h3>
                     
                     <div className="bg-sky-50 print:bg-white text-sky-800 print:text-slate-800 p-4 rounded-lg text-sm font-medium grid grid-cols-2 md:grid-cols-5 print:grid-cols-5 gap-y-3 gap-x-4 border border-sky-100 print:border-slate-300 shadow-sm">
@@ -785,7 +784,7 @@
                             </svg>
                         </div>
                         
-                        <div className="lg:col-span-3 space-y-4 lg:pl-6 border-l border-slate-100 print:border-none">
+                        <div className="lg:col-span-3 space-y-4 lg:pl-6 lg:border-l border-slate-100 print:border-none print:pl-0">
                             <h4 className="text-base font-semibold text-slate-700 mb-4 border-b pb-2">เลเยอร์ของแรงดัน (Pressure Layers)</h4>
                             
                             <label className="flex items-start space-x-3 p-3 bg-white border border-slate-100 hover:border-sky-300 rounded-lg cursor-pointer transition shadow-sm">
@@ -852,10 +851,10 @@
                 const svgd3 = calc.d3 * scaleY;
 
                 return (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm print:break-inside-avoid">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm print:break-inside-avoid animate-[fadeIn_0.3s_ease-in-out]">
                     <h3 className="font-bold text-lg text-slate-700 mb-4 border-b pb-2">แรงต้านทานแนวดิ่ง (Resisting Forces)</h3>
                     
-                    <div className="bg-emerald-50 text-emerald-800 p-4 rounded mb-6 text-sm font-medium grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 print:grid-cols-5 gap-3 border border-emerald-100 shadow-sm">
+                    <div className="bg-emerald-50 print:bg-white text-emerald-800 print:text-slate-800 p-4 rounded-lg mb-6 text-sm font-medium grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 print:grid-cols-5 gap-y-3 gap-x-4 border border-emerald-100 print:border-slate-300 shadow-sm">
                         <div>C (Toe): {geom.C.toFixed(2)} ม.</div>
                         <div>D (Stem Bot): {geom.D.toFixed(2)} ม.</div>
                         <div>G (Stem Top): {geom.G.toFixed(2)} ม.</div>
@@ -985,10 +984,10 @@
             };
 
             const TabStability = () => (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid animate-[fadeIn_0.3s_ease-in-out]">
                     <h3 className="font-bold text-lg text-slate-700 border-b pb-2">ตรวจสอบเสถียรภาพ (Stability Checks)</h3>
                     
-                    <div className="bg-sky-50 text-sky-800 p-4 rounded mb-6 text-sm font-medium grid grid-cols-2 md:grid-cols-5 print:grid-cols-5 gap-3 border border-sky-100 shadow-sm">
+                    <div className="bg-sky-50 print:bg-white text-sky-800 print:text-slate-800 p-4 rounded-lg mb-6 text-sm font-medium grid grid-cols-2 md:grid-cols-5 print:grid-cols-5 gap-y-3 gap-x-4 border border-sky-100 print:border-slate-300 shadow-sm">
                         <div>&Sigma;M<Sub text="R"/> = {calc.MR.toFixed(2)} กก.-ม.</div>
                         <div>&Sigma;M<Sub text="O"/> = {calc.MO.toFixed(2)} กก.-ม.</div>
                         <div>&Sigma;V = {calc.sumV.toFixed(2)} กก.</div>
@@ -1035,17 +1034,17 @@
             );
 
             const TabBearing = () => (
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid">
+                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid animate-[fadeIn_0.3s_ease-in-out]">
                     <h3 className="font-bold text-lg text-slate-700 border-b pb-2">แรงอัดดินใต้ฐานราก (Soil Bearing Pressure)</h3>
                     
-                    <div className="bg-amber-50 text-amber-800 p-4 rounded mb-6 text-sm font-medium border border-amber-200 shadow-sm flex items-start space-x-3">
+                    <div className="bg-amber-50 text-amber-800 p-4 rounded-lg mb-6 text-sm font-medium border border-amber-200 shadow-sm flex items-start space-x-3">
                         <svg className="w-6 h-6 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                         <div>
                             หากออกแบบโดยใช้ <strong>"ระบบเสาเข็ม"</strong> น้ำหนักและโมเมนต์ทั้งหมดควรถ่ายลงสู่เสาเข็ม การคำนวณหน้าแรงอัดดินนี้มีไว้เพื่อตรวจสอบกรณีไม่ใช้เสาเข็มเท่านั้น
                         </div>
                     </div>
 
-                    <div className="bg-sky-50 text-sky-800 p-4 rounded mb-6 text-sm font-medium grid grid-cols-2 md:grid-cols-5 print:grid-cols-5 gap-3 border border-sky-100 shadow-sm">
+                    <div className="bg-sky-50 print:bg-white text-sky-800 print:text-slate-800 p-4 rounded-lg mb-6 text-sm font-medium grid grid-cols-2 md:grid-cols-5 print:grid-cols-5 gap-y-3 gap-x-4 border border-sky-100 print:border-slate-300 shadow-sm">
                         <div>&Sigma;M<Sub text="R"/> = {calc.MR.toFixed(2)} กก.-ม.</div>
                         <div>&Sigma;M<Sub text="O"/> = {calc.MO.toFixed(2)} กก.-ม.</div>
                         <div>&Sigma;V = {calc.sumV.toFixed(2)} กก.</div>
@@ -1131,7 +1130,7 @@
                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid animate-[fadeIn_0.3s_ease-in-out]">
                         <h3 className="font-bold text-lg text-indigo-800 border-b border-indigo-100 pb-2">คำนวณแรงปฏิกิริยาในเสาเข็ม (Pile Reactions)</h3>
                         
-                        <div className="bg-indigo-50 text-indigo-900 p-4 rounded mb-6 text-sm font-medium border border-indigo-100 shadow-sm">
+                        <div className="bg-indigo-50 print:bg-white text-indigo-900 print:text-slate-800 p-4 rounded-lg mb-6 text-sm font-medium border border-indigo-100 print:border-slate-300 shadow-sm">
                             <div className="mb-2 font-bold flex items-center space-x-2">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                                 <span>สรุปแรงลัพธ์ที่กระทำต่อช่วงเสาเข็ม 1 ช่วง (S<Sub text="L"/> = {pile.spacingL} ม.)</span>
@@ -1174,7 +1173,7 @@
                                 </div>
                             </StepBox>
                         ) : (
-                            <StepBox title="1. คำนวณโมเมนต์รอบ CG กลุ่มเสาเข็ม (Elastic Center Method)">
+                            <StepBox title="1. คำนวณคุณสมบัติกลุ่มเสาเข็มรอบ CG">
                                 <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-8 mb-4">
                                     <div>
                                         <div className="text-slate-600 mb-1">ตำแหน่ง CG กลุ่มเสาเข็ม</div>
@@ -1204,47 +1203,78 @@
                             </StepBox>
                         )}
 
-                        <StepBox title="2. คำนวณแรงตามแนวแกนในเสาเข็ม (Axial Forces)">
-                            <div className="mb-4 bg-slate-100 p-3 rounded border border-slate-200 text-sm">
-                                <span className="font-semibold block mb-1">สมการ: <span className="font-mono font-normal">
-                                    P<Sub text="i"/> = (V<Sub text="design"/> / N) &plusmn; (M<Sub text="design"/> &times; d<Sub text="i"/>) / &Sigma;d&sup2;
-                                </span></span>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2">
+                        <StepBox title="2. คำนวณแรงปฏิกิริยาในเสาเข็ม (Pile Axial & Shear Forces)">
+                            <div className="mb-6 bg-slate-50 print:bg-transparent p-4 rounded-lg border border-slate-200 text-sm print:border-none print:p-0">
+                                <div className="flex flex-col sm:flex-row justify-start sm:items-center sm:space-x-8 border-b border-slate-200 pb-3 mb-3 print:border-none print:pb-0">
+                                     <div className="font-semibold text-slate-700 flex items-center">
+                                        สมการ (Axial): <span className="font-mono font-normal ml-2 bg-white print:bg-slate-50 px-2 py-1 rounded border border-slate-200 inline-block">
+                                            P<Sub text="i"/> = (V<Sub text="design"/> / N) &plusmn; (M<Sub text="design"/> &times; d<Sub text="i"/>) / &Sigma;d&sup2;
+                                        </span>
+                                    </div>
+                                    <div className="font-semibold text-slate-700 mt-3 sm:mt-0 flex items-center">
+                                        สมการ (Shear): <span className="font-mono font-normal ml-2 bg-white print:bg-slate-50 px-2 py-1 rounded border border-slate-200 inline-block">
+                                            V<Sub text="shear"/> = P<Sub text="design"/> / {calc.N_piles}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-2">
                                     {(calc.pile_results || []).map(p => (
-                                        <div key={p.id}>d<Sub text={p.id}/> = {p.d.toFixed(3)} ม.</div>
+                                        <div key={p.id} className="bg-white p-2 rounded border border-slate-200 text-center shadow-sm">d<Sub text={p.id}/> = {p.d.toFixed(3)} ม.</div>
                                     ))}
+                                    <div className="bg-white p-2 rounded border border-slate-200 text-center font-bold shadow-sm">&Sigma;d&sup2; = {(calc.sum_d2 || 0).toFixed(4)} ม.&sup2;</div>
                                 </div>
-                                <div className="mt-2 font-bold">&Sigma;d&sup2; = {(calc.sum_d2 || 0).toFixed(4)} ม.&sup2;</div>
-                                <div className="mt-2 text-slate-500">
-                                    โดยใช้ V<Sub text="design"/> = {(calc.V_design_sp || 0).toFixed(0)} กก., M<Sub text="design"/> = {(calc.M_design_sp || 0).toFixed(0)} กก.-ม.
+                                <div className="mt-3 text-slate-500 text-xs">
+                                    * โดยใช้ V<Sub text="design"/> = {(calc.V_design_sp || 0).toFixed(0)} กก., M<Sub text="design"/> = {(calc.M_design_sp || 0).toFixed(0)} กก.-ม., P<Sub text="design"/> = {(calc.P_design_sp || 0).toFixed(0)} กก.
                                 </div>
+                                {pile.designMode === 'excess' && calc.P_excess === 0 && (
+                                    <div className="mt-2 text-emerald-600 font-semibold text-xs">*เนื่องจาก F.S. ลื่นไถล &ge; 1.50 แรงเฉือนจึงเป็น 0 กก.</div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 gap-6">
                                 {(calc.pile_results || []).map(p => (
-                                    <div key={p.id} className="border border-indigo-200 rounded-lg overflow-hidden print:break-inside-avoid">
-                                        <div className="bg-indigo-50 font-bold text-indigo-800 p-2 text-center border-b border-indigo-200 flex justify-between px-4">
+                                    <div key={p.id} className="border border-indigo-200 rounded-xl overflow-hidden print:break-inside-avoid shadow-sm hover:shadow transition-shadow">
+                                        <div className="bg-indigo-50 font-bold text-indigo-800 p-3 text-center border-b border-indigo-200 flex justify-between px-4 items-center">
                                             <span>แถวที่ {p.id}</span>
-                                            <span className="text-xs bg-indigo-100 px-2 py-0.5 rounded text-indigo-600">x = {p.x.toFixed(2)}m</span>
+                                            <span className="text-xs bg-white px-2 py-1 rounded text-indigo-600 border border-indigo-100 shadow-sm">x = {p.x.toFixed(2)}m</span>
                                         </div>
-                                        <div className="p-4 bg-white flex flex-col items-center">
-                                            <div className="text-2xl font-bold mb-2">
-                                                {p.p_axial > 0 ? (
-                                                    <span className="text-rose-600">{p.p_axial.toFixed(0)} kg <span className="text-sm font-normal block text-center">(Compression)</span></span>
-                                                ) : p.p_axial < 0 ? (
-                                                    <span className="text-blue-600">{Math.abs(p.p_axial).toFixed(0)} kg <span className="text-sm font-normal block text-center">(Tension)</span></span>
-                                                ) : (
-                                                    <span className="text-slate-400">0 kg <span className="text-sm font-normal block text-center">(ไม่มีแรงกระทำ)</span></span>
-                                                )}
+                                        <div className="p-5 bg-white flex flex-col items-center">
+                                            <div className="w-full mb-4 border-b border-slate-100 pb-4 text-center">
+                                                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">Axial Force (P)</span>
+                                                <div className="text-3xl font-bold mb-2">
+                                                    {p.p_axial > 0 ? (
+                                                        <span className="text-rose-600">{p.p_axial.toFixed(0)}</span>
+                                                    ) : p.p_axial < 0 ? (
+                                                        <span className="text-blue-600">{Math.abs(p.p_axial).toFixed(0)}</span>
+                                                    ) : (
+                                                        <span className="text-slate-400">0</span>
+                                                    )}
+                                                    <span className="text-lg ml-1">kg</span>
+                                                </div>
+                                                <div className="text-xs text-slate-500 mb-2">
+                                                    {p.p_axial > 0 ? '(Compression)' : p.p_axial < 0 ? '(Tension)' : '(No Force)'}
+                                                </div>
+                                                <div>
+                                                    {p.p_axial === 0 ? (
+                                                        <Badge condition={true} textTrue="ปลอดภัย" />
+                                                    ) : p.p_axial > 0 ? (
+                                                        <Badge condition={p.p_axial <= pile.allowComp} textTrue={`\u2264 ${pile.allowComp} (ผ่าน)`} textFalse={`\u003E ${pile.allowComp} (เกินพิกัด)`} />
+                                                    ) : (
+                                                        <Badge condition={Math.abs(p.p_axial) <= pile.allowTen} textTrue={`\u2264 ${pile.allowTen} (ผ่าน)`} textFalse={`\u003E ${pile.allowTen} (เกินพิกัด)`} />
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="w-full mt-2 text-center">
-                                                {p.p_axial === 0 ? (
-                                                    <Badge condition={true} textTrue="ปลอดภัย" />
-                                                ) : p.p_axial > 0 ? (
-                                                    <Badge condition={p.p_axial <= pile.allowComp} textTrue={`\u2264 ${pile.allowComp} (ผ่าน)`} textFalse={`\u003E ${pile.allowComp} (เกินพิกัด)`} />
-                                                ) : (
-                                                    <Badge condition={Math.abs(p.p_axial) <= pile.allowTen} textTrue={`\u2264 ${pile.allowTen} (ผ่าน)`} textFalse={`\u003E ${pile.allowTen} (เกินพิกัด)`} />
-                                                )}
+                                            
+                                            <div className="w-full text-center">
+                                                <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold block mb-1">Shear Force (V)</span>
+                                                <div className="text-2xl font-bold text-amber-600 mb-2">{(calc.V_shear_pile || 0).toFixed(0)} <span className="text-base">kg</span></div>
+                                                <div>
+                                                    {calc.P_excess === 0 && pile.designMode === 'excess' ? (
+                                                        <Badge condition={true} textTrue="ปลอดภัย" />
+                                                    ) : (
+                                                        <Badge condition={(calc.V_shear_pile || 0) <= pile.allowShear} textTrue={`\u2264 ${pile.allowShear} (ผ่าน)`} textFalse={`\u003E ${pile.allowShear} (เกินพิกัด)`} />
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1252,37 +1282,13 @@
                             </div>
                         </StepBox>
 
-                        <StepBox title={`3. คำนวณแรงเฉือนในเสาเข็ม (Shear Forces${pile.designMode === 'excess' ? ' - จากแรงลื่นไถลส่วนเกิน' : ''})`}>
-                            <div className="flex flex-col md:flex-row items-center justify-between">
-                                <div className="text-sm text-slate-600 max-w-md space-y-2">
-                                    {pile.designMode === 'full' ? (
-                                        <div>ในการออกแบบเสาเข็มสำหรับกำแพงกันดิน มักประเมินอย่างอนุรักษ์นิยม (Conservative) โดยให้ <strong className="text-slate-800">เสาเข็มรับแรงผลักด้านข้างทั้งหมด (P<Sub text="pile"/>)</strong> โดยไม่คิดผลของแรงเสียดทานดินก้นฐานราก</div>
-                                    ) : (
-                                        <div>เนื่องจากคุณเลือกออกแบบแบบรับเฉพาะแรงส่วนเกิน หากเสถียรภาพการลื่นไถล (Sliding) ผ่านเกณฑ์ด้วยแรงเสียดทานของดิน (F.S. &ge; 1.5) เสาเข็มจะไม่ต้องรับแรงเฉือน</div>
-                                    )}
-                                </div>
-                                <div className="mt-4 md:mt-0 bg-white border border-slate-200 p-4 rounded-lg flex flex-col items-center min-w-[200px]">
-                                    <span className="text-slate-500 font-semibold mb-1">
-                                        V<Sub text="shear"/> (ต่อต้น) = {pile.designMode === 'full' ? 'P\u209A\u2092\u2097\u2091' : 'P\u2091\u2093\u2093\u2091\u209B\u209B'} / {calc.N_piles}
-                                    </span>
-                                    <span className="text-2xl font-bold text-amber-600">{(calc.V_shear_pile || 0).toFixed(0)} kg</span>
-                                    <div className="mt-2">
-                                        {calc.P_excess === 0 && pile.designMode === 'excess' ? (
-                                            <Badge condition={true} textTrue="ปลอดภัย (ไม่มีแรงเฉือน)" />
-                                        ) : (
-                                            <Badge condition={(calc.V_shear_pile || 0) <= pile.allowShear} textTrue={`\u2264 ${pile.allowShear} (ผ่าน)`} textFalse={`\u003E ${pile.allowShear} (เกินพิกัดแรงเฉือน)`} />
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </StepBox>
                     </div>
                 );
             };
 
             const TabCalculations = () => {
                 return (
-                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid">
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid animate-[fadeIn_0.3s_ease-in-out]">
                         <h3 className="font-bold text-lg text-slate-700 border-b pb-2">รายการคำนวณ (Detailed Calculations)</h3>
                         
                         <StepBox title="1. สัมประสิทธิ์แรงดันดินรุก (Rankine)">
@@ -1458,7 +1464,7 @@
 
             const TabManual = () => (
                 <div className="space-y-6">
-                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-sm text-slate-700 leading-relaxed space-y-4 print:break-inside-avoid">
+                    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-sm text-slate-700 leading-relaxed space-y-4 print:break-inside-avoid animate-[fadeIn_0.3s_ease-in-out]">
                         <h3 className="font-bold text-lg text-slate-800 border-b pb-2">ความหมายของตัวแปรที่ใช้ในการคำนวณ</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
