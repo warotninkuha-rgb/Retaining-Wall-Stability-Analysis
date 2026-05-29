@@ -449,39 +449,7 @@
                 </div>
             );
 
-            const TabSummary = () => (
-                <div className="space-y-6 animate-[fadeIn_0.3s_ease-in-out]">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-6 print:gap-4">
-                        <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                            <span className="text-slate-500 text-sm mb-3 font-medium">Overturning (F.S.)</span>
-                            <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{calc.FS_ot.toFixed(2)}</div>
-                            <Badge condition={calc.FS_ot >= 1.5} textTrue={"\u2265 1.50 ผ่าน"} textFalse={"\u003C 1.50 ไม่ผ่าน"} />
-                        </div>
-                        <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                            <span className="text-slate-500 text-sm mb-3 font-medium">Sliding (F.S.)</span>
-                            <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{calc.FS_slide.toFixed(2)}</div>
-                            <Badge condition={calc.FS_slide >= 1.5} textTrue={"\u2265 1.50 ผ่าน"} textFalse={"\u003C 1.50 ไม่ผ่าน"} />
-                        </div>
-                        <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                            <span className="text-slate-500 text-sm mb-3 font-medium">เยื้องศูนย์ e (ม.)</span>
-                            <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{Math.abs(calc.e).toFixed(3)}</div>
-                            <Badge condition={calc.isMiddleThird} textTrue={`\u2264 B/6 (${calc.B6.toFixed(2)} ม.)`} textFalse={`\u003E B/6 (${calc.B6.toFixed(2)} ม.)`} />
-                        </div>
-                        <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                            <span className="text-slate-500 text-sm mb-3 font-medium">q<Sub text="max"/> (กก./ม.&sup2;)</span>
-                            <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{calc.q_max.toFixed(0)}</div>
-                            <Badge condition={calc.q_max <= base.q_allow} textTrue={"\u2264 q_allow ผ่าน"} textFalse={"\u003E q_allow ไม่ผ่าน"} />
-                        </div>
-                    </div>
-                    {pile.usePiles && (
-                        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-indigo-800 text-sm text-center font-medium shadow-sm print:break-inside-avoid">
-                            * มีการเปิดใช้งาน <strong>ระบบฐานรากเสาเข็ม</strong> โปรดตรวจสอบกำลังรับแรงของเสาเข็มในแท็บ "แรงเสาเข็ม (Piles)" เพื่อพิจารณาเสถียรภาพที่แท้จริง
-                        </div>
-                    )}
-                </div>
-            );
-
-            const TabDrawings = () => {
+            const TabDashboard = () => {
                 const scale = Math.min(300 / calc.B, 250 / (geom.H + geom.T1), 120);
                 const scaleX = scale; 
                 const scaleY = scale;    
@@ -523,133 +491,154 @@
                 const planY0 = 50;
 
                 return (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4 print:mt-0 animate-[fadeIn_0.3s_ease-in-out]">
-                        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-start overflow-visible print:break-inside-avoid">
-                            <h4 className="text-lg font-bold text-slate-700 mb-6 w-full text-center border-b pb-2">ไดอะแกรมรูปด้าน (Elevation)</h4>
-                            <svg viewBox="0 0 650 450" className="w-full max-w-lg h-auto drop-shadow-sm mx-auto">
-                                <defs>
-                                    <pattern id="diagonalHatch" patternUnits="userSpaceOnUse" width="8" height="8">
-                                        <path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="#fb7185" strokeWidth="1" />
-                                    </pattern>
-                                    <pattern id="tensionHatch" patternUnits="userSpaceOnUse" width="8" height="8">
-                                        <path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="#c084fc" strokeWidth="1" />
-                                    </pattern>
-                                </defs>
-
-                                <line x1="20" y1={y0 - svgH - svgT1} x2="630" y2={y0 - svgH - svgT1} stroke="#94a3b8" strokeWidth="2" strokeDasharray="5,5" />
-                                <text x="610" y={y0 - svgH - svgT1 - 8} fill="#64748b" fontSize="12" textAnchor="end">ระดับดิน</text>
-
-                                <polygon points={wallPolygon} fill="#e2e8f0" stroke="#64748b" strokeWidth="2" strokeLinejoin="round" />
-
-                                <line x1={x0} y1={y0} x2={x0 + svgB} y2={y0} stroke="#475569" strokeWidth="2" />
-                                
-                                {(!pile.usePiles || pile.designMode === 'excess') && (
-                                    <g>
-                                        <polygon 
-                                            points={`${x0},${y0} ${x0 + svgB},${y0} ${x0 + svgB},${y0 + h_min} ${x0},${y0 + h_max}`}
-                                            fill={calc.q_min < 0 ? "url(#tensionHatch)" : "url(#diagonalHatch)"}
-                                            stroke={calc.q_min < 0 ? "#a855f7" : "#e11d48"} strokeWidth="1.5"
-                                        />
-                                        <line x1={x0} y1={y0 + h_max} x2={x0 + svgB} y2={y0 + h_min} stroke="#be123c" strokeWidth="2" />
-                                        <line x1={x0} y1={y0} x2={x0} y2={y0 + h_max} stroke="#be123c" strokeWidth="2" />
-                                        <line x1={x0 + svgB} y1={y0} x2={x0 + svgB} y2={y0 + h_min} stroke="#be123c" strokeWidth="2" />
-                                        <text x={x0 - 8} y={y0 + h_max + (calc.q_max > 0 ? 15 : -5)} fill="#be123c" fontSize="14" fontWeight="bold" textAnchor="end">
-                                            q_max = {calc.q_max.toFixed(0)}
-                                        </text>
-                                        <text x={x0 + svgB + 8} y={y0 + h_min + (calc.q_min > 0 ? 15 : -5)} fill={calc.q_min < 0 ? "#7e22ce" : "#be123c"} fontSize="14" fontWeight="bold" textAnchor="start">
-                                            q_min = {calc.q_min.toFixed(0)} {calc.q_min < 0 && '(Tension)'}
-                                        </text>
-                                    </g>
-                                )}
-
-                                {pile.usePiles && pileRows.map((x, i) => (
-                                    <g key={i}>
-                                        <rect x={x0 + x * scaleX - 10} y={y0} width="20" height="60" fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
-                                        <path d={`M ${x0 + x * scaleX - 10} ${y0 + 60} L ${x0 + x * scaleX} ${y0 + 80} L ${x0 + x * scaleX + 10} ${y0 + 60} Z`} fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
-                                    </g>
-                                ))}
-
-                                {/* ลูกศรแรงต้านแนวดิ่ง (V) */}
-                                <line x1={x_v} y1={y0 - svgH - svgT1 - 60} x2={x_v} y2={y0 - 35} stroke="#10b981" strokeWidth="4" strokeDasharray="6,4" />
-                                <polygon points={`${x_v - 8},${y0 - 36} ${x_v + 8},${y0 - 36} ${x_v},${y0 - 20}`} fill="#10b981" />
-                                <circle cx={x_v} cy={y0} r="4" fill="#10b981" />
-                                <text x={x_v + 12} y={y0 - svgH - svgT1 - 45} fill="#047857" fontSize="16" fontWeight="bold">
-                                    &#931;V = {calc.sumV.toFixed(0)} kg
-                                </text>
-                                <text x={x_v + 12} y={y0 - svgH - svgT1 - 25} fill="#047857" fontSize="13">
-                                    (X&#772; = {calc.X_bar.toFixed(2)}m)
-                                </text>
-
-                                {/* ลูกศรแรงผลักด้านข้าง (P) */}
-                                <line x1={x0 + svgB + 100} y1={y_p} x2={x0 + svgB + 15} y2={y_p} stroke="#0ea5e9" strokeWidth="4" />
-                                <polygon points={`${x0 + svgB + 16},${y_p - 8} ${x0 + svgB + 16},${y_p + 8} ${x0 + svgB},${y_p}`} fill="#0ea5e9" />
-                                <text x={x0 + svgB + 55} y={y_p - 12} fill="#0369a1" fontSize="16" fontWeight="bold" textAnchor="middle">
-                                    &#931;P = {calc.sumP.toFixed(0)} kg
-                                </text>
-                                <text x={x0 + svgB + 55} y={y_p + 20} fill="#0369a1" fontSize="13" textAnchor="middle">
-                                    (y&#772; = {y_bar_P.toFixed(2)}m)
-                                </text>
-
-                                {/* ขีดเส้นประแนวแรง V ลงมาด้านล่าง */}
-                                <line x1={x_v} y1={y0} x2={x_v} y2={y0 + 105} stroke="#10b981" strokeWidth="1" strokeDasharray="3,3" opacity="0.6" />
-                            </svg>
-                        </div>
-
-                        {pile.usePiles ? (
-                            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-start overflow-visible print:break-inside-avoid">
-                                <h4 className="text-lg font-bold text-slate-700 mb-6 w-full text-center border-b pb-2">แปลนฐานราก (Plan View)</h4>
-                                <svg viewBox="0 0 600 450" className="w-full max-w-sm h-auto drop-shadow-sm mx-auto mt-4">
-                                    <defs>
-                                        <marker id="arrow-dim" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
-                                            <polygon points="0 0, 6 3, 0 6" fill="#64748b" />
-                                        </marker>
-                                    </defs>
-
-                                    {/* พื้นที่ฐานราก */}
-                                    <rect x={planX0} y={planY0} width={planW} height={planH} fill="#f1f5f9" stroke="#475569" strokeWidth="2" rx="4" />
-                                    
-                                    {/* เส้นขอบแนวกำแพง */}
-                                    <line x1={planX0 + geom.C * planScale} y1={planY0} x2={planX0 + geom.C * planScale} y2={planY0 + planH} stroke="#94a3b8" strokeWidth="2" strokeDasharray="4,4" />
-                                    <line x1={planX0 + (geom.C + geom.D) * planScale} y1={planY0} x2={planX0 + (geom.C + geom.D) * planScale} y2={planY0 + planH} stroke="#94a3b8" strokeWidth="2" strokeDasharray="4,4" />
-
-                                    {/* เสาเข็มแบบ Dynamic */}
-                                    {pileRows.map((x, i) => {
-                                        const lineY = planY0 - 20 - (i * 20); 
-                                        return (
-                                            <g key={i}>
-                                                <circle cx={planX0 + x * planScale} cy={planY0 + planH / 2} r="12" fill="#818cf8" stroke="#1e3a8a" strokeWidth="2" />
-                                                <text x={planX0 + x * planScale} y={planY0 + planH / 2 - 20} fill="#1e3a8a" fontSize="12" fontWeight="bold" textAnchor="middle">Row {i+1}</text>
-                                                
-                                                <line x1={planX0} y1={lineY} x2={planX0 + x * planScale} y2={lineY} stroke="#64748b" strokeWidth="1" markerStart="url(#arrow-dim)" markerEnd="url(#arrow-dim)" />
-                                                <text x={planX0 + (x * planScale) / 2} y={lineY - 5} fill="#475569" fontSize="12" textAnchor="middle">x{i+1}={x}</text>
-                                                
-                                                <line x1={planX0 + x * planScale} y1={lineY} x2={planX0 + x * planScale} y2={planY0 + planH / 2} stroke="#64748b" strokeWidth="1" strokeDasharray="3,3" />
-                                            </g>
-                                        );
-                                    })}
-                                    
-                                    {/* เส้นปะโยงจาก Toe ไปแกนเริ่มบอกระยะ */}
-                                    {pileRows.length > 0 && <line x1={planX0} y1={planY0 - 20 - ((pileRows.length - 1) * 20)} x2={planX0} y2={planY0} stroke="#64748b" strokeWidth="1" strokeDasharray="3,3" />}
-
-                                    {/* Dimension แนวแกน Y (SL) */}
-                                    <line x1={planX0 - 20} y1={planY0} x2={planX0 - 20} y2={planY0 + planH} stroke="#64748b" strokeWidth="1" markerStart="url(#arrow-dim)" markerEnd="url(#arrow-dim)" />
-                                    <line x1={planX0 - 30} y1={planY0} x2={planX0 - 10} y2={planY0} stroke="#64748b" strokeWidth="1" />
-                                    <line x1={planX0 - 30} y1={planY0 + planH} x2={planX0 - 10} y2={planY0 + planH} stroke="#64748b" strokeWidth="1" />
-                                    <text x={planX0 - 35} y={planY0 + planH / 2} fill="#475569" fontSize="14" textAnchor="middle" transform={`rotate(-90, ${planX0 - 35}, ${planY0 + planH / 2})`}>S_L = {pile.spacingL} m</text>
-
-                                    {/* Dimension แนวแกน X (B) */}
-                                    <line x1={planX0} y1={planY0 + planH + 20} x2={planX0 + planW} y2={planY0 + planH + 20} stroke="#64748b" strokeWidth="1" markerStart="url(#arrow-dim)" markerEnd="url(#arrow-dim)" />
-                                    <line x1={planX0} y1={planY0 + planH + 10} x2={planX0} y2={planY0 + planH + 30} stroke="#64748b" strokeWidth="1" />
-                                    <line x1={planX0 + planW} y1={planY0 + planH + 10} x2={planX0 + planW} y2={planY0 + planH + 30} stroke="#64748b" strokeWidth="1" />
-                                    <text x={planX0 + planW / 2} y={planY0 + planH + 40} fill="#475569" fontSize="14" textAnchor="middle">B = {calc.B.toFixed(2)} m</text>
-                                </svg>
+                    <div className="space-y-6 animate-[fadeIn_0.3s_ease-in-out]">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-6 print:gap-4">
+                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
+                                <span className="text-slate-500 text-sm mb-3 font-medium">Overturning (F.S.)</span>
+                                <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{calc.FS_ot.toFixed(2)}</div>
+                                <Badge condition={calc.FS_ot >= 1.5} textTrue={"\u2265 1.50 ผ่าน"} textFalse={"\u003C 1.50 ไม่ผ่าน"} />
                             </div>
-                        ) : (
-                            <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-slate-400 print:hidden">
-                                <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                                <p>เปิดใช้ "ระบบฐานรากเสาเข็ม" เพื่อแสดงแปลนที่นี่</p>
+                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
+                                <span className="text-slate-500 text-sm mb-3 font-medium">Sliding (F.S.)</span>
+                                <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{calc.FS_slide.toFixed(2)}</div>
+                                <Badge condition={calc.FS_slide >= 1.5} textTrue={"\u2265 1.50 ผ่าน"} textFalse={"\u003C 1.50 ไม่ผ่าน"} />
+                            </div>
+                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
+                                <span className="text-slate-500 text-sm mb-3 font-medium">เยื้องศูนย์ e (ม.)</span>
+                                <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{Math.abs(calc.e).toFixed(3)}</div>
+                                <Badge condition={calc.isMiddleThird} textTrue={`\u2264 B/6 (${calc.B6.toFixed(2)} ม.)`} textFalse={`\u003E B/6 (${calc.B6.toFixed(2)} ม.)`} />
+                            </div>
+                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
+                                <span className="text-slate-500 text-sm mb-3 font-medium">q<Sub text="max"/> (กก./ม.&sup2;)</span>
+                                <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{calc.q_max.toFixed(0)}</div>
+                                <Badge condition={calc.q_max <= base.q_allow} textTrue={"\u2264 q_allow ผ่าน"} textFalse={"\u003E q_allow ไม่ผ่าน"} />
+                            </div>
+                        </div>
+                        {pile.usePiles && (
+                            <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-indigo-800 text-sm text-center font-medium shadow-sm print:break-inside-avoid">
+                                * มีการเปิดใช้งาน <strong>ระบบฐานรากเสาเข็ม</strong> โปรดตรวจสอบกำลังรับแรงของเสาเข็มในแท็บ "แรงเสาเข็ม (Piles)" เพื่อพิจารณาเสถียรภาพที่แท้จริง
                             </div>
                         )}
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4 print:mt-4">
+                            <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-start overflow-visible print:break-inside-avoid">
+                                <h4 className="text-lg font-bold text-slate-700 mb-6 w-full text-center border-b pb-2">ไดอะแกรมรูปด้าน (Elevation)</h4>
+                                <svg viewBox="0 0 650 450" className="w-full max-w-lg h-auto drop-shadow-sm mx-auto">
+                                    <defs>
+                                        <pattern id="diagonalHatch" patternUnits="userSpaceOnUse" width="8" height="8">
+                                            <path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="#fb7185" strokeWidth="1" />
+                                        </pattern>
+                                        <pattern id="tensionHatch" patternUnits="userSpaceOnUse" width="8" height="8">
+                                            <path d="M-2,2 l4,-4 M0,8 l8,-8 M6,10 l4,-4" stroke="#c084fc" strokeWidth="1" />
+                                        </pattern>
+                                    </defs>
+
+                                    <line x1="20" y1={y0 - svgH - svgT1} x2="630" y2={y0 - svgH - svgT1} stroke="#94a3b8" strokeWidth="2" strokeDasharray="5,5" />
+                                    <text x="610" y={y0 - svgH - svgT1 - 8} fill="#64748b" fontSize="12" textAnchor="end">ระดับดิน</text>
+
+                                    <polygon points={wallPolygon} fill="#e2e8f0" stroke="#64748b" strokeWidth="2" strokeLinejoin="round" />
+
+                                    <line x1={x0} y1={y0} x2={x0 + svgB} y2={y0} stroke="#475569" strokeWidth="2" />
+                                    
+                                    {(!pile.usePiles || pile.designMode === 'excess') && (
+                                        <g>
+                                            <polygon 
+                                                points={`${x0},${y0} ${x0 + svgB},${y0} ${x0 + svgB},${y0 + h_min} ${x0},${y0 + h_max}`}
+                                                fill={calc.q_min < 0 ? "url(#tensionHatch)" : "url(#diagonalHatch)"}
+                                                stroke={calc.q_min < 0 ? "#a855f7" : "#e11d48"} strokeWidth="1.5"
+                                            />
+                                            <line x1={x0} y1={y0 + h_max} x2={x0 + svgB} y2={y0 + h_min} stroke="#be123c" strokeWidth="2" />
+                                            <line x1={x0} y1={y0} x2={x0} y2={y0 + h_max} stroke="#be123c" strokeWidth="2" />
+                                            <line x1={x0 + svgB} y1={y0} x2={x0 + svgB} y2={y0 + h_min} stroke="#be123c" strokeWidth="2" />
+                                            <text x={x0 - 8} y={y0 + h_max + (calc.q_max > 0 ? 15 : -5)} fill="#be123c" fontSize="14" fontWeight="bold" textAnchor="end">
+                                                q_max = {calc.q_max.toFixed(0)}
+                                            </text>
+                                            <text x={x0 + svgB + 8} y={y0 + h_min + (calc.q_min > 0 ? 15 : -5)} fill={calc.q_min < 0 ? "#7e22ce" : "#be123c"} fontSize="14" fontWeight="bold" textAnchor="start">
+                                                q_min = {calc.q_min.toFixed(0)} {calc.q_min < 0 && '(Tension)'}
+                                            </text>
+                                        </g>
+                                    )}
+
+                                    {pile.usePiles && pileRows.map((x, i) => (
+                                        <g key={i}>
+                                            <rect x={x0 + x * scaleX - 10} y={y0} width="20" height="60" fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
+                                            <path d={`M ${x0 + x * scaleX - 10} ${y0 + 60} L ${x0 + x * scaleX} ${y0 + 80} L ${x0 + x * scaleX + 10} ${y0 + 60} Z`} fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
+                                        </g>
+                                    ))}
+
+                                    <line x1={x_v} y1={y0 - svgH - svgT1 - 60} x2={x_v} y2={y0 - 35} stroke="#10b981" strokeWidth="4" strokeDasharray="6,4" />
+                                    <polygon points={`${x_v - 8},${y0 - 36} ${x_v + 8},${y0 - 36} ${x_v},${y0 - 20}`} fill="#10b981" />
+                                    <circle cx={x_v} cy={y0} r="4" fill="#10b981" />
+                                    <text x={x_v + 12} y={y0 - svgH - svgT1 - 45} fill="#047857" fontSize="16" fontWeight="bold">
+                                        &#931;V = {calc.sumV.toFixed(0)} kg
+                                    </text>
+                                    <text x={x_v + 12} y={y0 - svgH - svgT1 - 25} fill="#047857" fontSize="13">
+                                        (X&#772; = {calc.X_bar.toFixed(2)}m)
+                                    </text>
+
+                                    <line x1={x0 + svgB + 100} y1={y_p} x2={x0 + svgB + 15} y2={y_p} stroke="#0ea5e9" strokeWidth="4" />
+                                    <polygon points={`${x0 + svgB + 16},${y_p - 8} ${x0 + svgB + 16},${y_p + 8} ${x0 + svgB},${y_p}`} fill="#0ea5e9" />
+                                    <text x={x0 + svgB + 55} y={y_p - 12} fill="#0369a1" fontSize="16" fontWeight="bold" textAnchor="middle">
+                                        &#931;P = {calc.sumP.toFixed(0)} kg
+                                    </text>
+                                    <text x={x0 + svgB + 55} y={y_p + 20} fill="#0369a1" fontSize="13" textAnchor="middle">
+                                        (y&#772; = {y_bar_P.toFixed(2)}m)
+                                    </text>
+
+                                    <line x1={x_v} y1={y0} x2={x_v} y2={y0 + 105} stroke="#10b981" strokeWidth="1" strokeDasharray="3,3" opacity="0.6" />
+                                </svg>
+                            </div>
+
+                            {pile.usePiles ? (
+                                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-start overflow-visible print:break-inside-avoid">
+                                    <h4 className="text-lg font-bold text-slate-700 mb-6 w-full text-center border-b pb-2">แปลนฐานราก (Plan View)</h4>
+                                    <svg viewBox="0 0 600 450" className="w-full max-w-sm h-auto drop-shadow-sm mx-auto mt-4">
+                                        <defs>
+                                            <marker id="arrow-dim" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+                                                <polygon points="0 0, 6 3, 0 6" fill="#64748b" />
+                                            </marker>
+                                        </defs>
+
+                                        <rect x={planX0} y={planY0} width={planW} height={planH} fill="#f1f5f9" stroke="#475569" strokeWidth="2" rx="4" />
+                                        
+                                        <line x1={planX0 + geom.C * planScale} y1={planY0} x2={planX0 + geom.C * planScale} y2={planY0 + planH} stroke="#94a3b8" strokeWidth="2" strokeDasharray="4,4" />
+                                        <line x1={planX0 + (geom.C + geom.D) * planScale} y1={planY0} x2={planX0 + (geom.C + geom.D) * planScale} y2={planY0 + planH} stroke="#94a3b8" strokeWidth="2" strokeDasharray="4,4" />
+
+                                        {pileRows.map((x, i) => {
+                                            const lineY = planY0 - 20 - (i * 20); 
+                                            return (
+                                                <g key={i}>
+                                                    <circle cx={planX0 + x * planScale} cy={planY0 + planH / 2} r="12" fill="#818cf8" stroke="#1e3a8a" strokeWidth="2" />
+                                                    <text x={planX0 + x * planScale} y={planY0 + planH / 2 - 20} fill="#1e3a8a" fontSize="12" fontWeight="bold" textAnchor="middle">Row {i+1}</text>
+                                                    
+                                                    <line x1={planX0} y1={lineY} x2={planX0 + x * planScale} y2={lineY} stroke="#64748b" strokeWidth="1" markerStart="url(#arrow-dim)" markerEnd="url(#arrow-dim)" />
+                                                    <text x={planX0 + (x * planScale) / 2} y={lineY - 5} fill="#475569" fontSize="12" textAnchor="middle">x{i+1}={x}</text>
+                                                    
+                                                    <line x1={planX0 + x * planScale} y1={lineY} x2={planX0 + x * planScale} y2={planY0 + planH / 2} stroke="#64748b" strokeWidth="1" strokeDasharray="3,3" />
+                                                </g>
+                                            );
+                                        })}
+                                        
+                                        {pileRows.length > 0 && <line x1={planX0} y1={planY0 - 20 - ((pileRows.length - 1) * 20)} x2={planX0} y2={planY0} stroke="#64748b" strokeWidth="1" strokeDasharray="3,3" />}
+
+                                        <line x1={planX0 - 20} y1={planY0} x2={planX0 - 20} y2={planY0 + planH} stroke="#64748b" strokeWidth="1" markerStart="url(#arrow-dim)" markerEnd="url(#arrow-dim)" />
+                                        <line x1={planX0 - 30} y1={planY0} x2={planX0 - 10} y2={planY0} stroke="#64748b" strokeWidth="1" />
+                                        <line x1={planX0 - 30} y1={planY0 + planH} x2={planX0 - 10} y2={planY0 + planH} stroke="#64748b" strokeWidth="1" />
+                                        <text x={planX0 - 35} y={planY0 + planH / 2} fill="#475569" fontSize="14" textAnchor="middle" transform={`rotate(-90, ${planX0 - 35}, ${planY0 + planH / 2})`}>S_L = {pile.spacingL} m</text>
+
+                                        <line x1={planX0} y1={planY0 + planH + 20} x2={planX0 + planW} y2={planY0 + planH + 20} stroke="#64748b" strokeWidth="1" markerStart="url(#arrow-dim)" markerEnd="url(#arrow-dim)" />
+                                        <line x1={planX0} y1={planY0 + planH + 10} x2={planX0} y2={planY0 + planH + 30} stroke="#64748b" strokeWidth="1" />
+                                        <line x1={planX0 + planW} y1={planY0 + planH + 10} x2={planX0 + planW} y2={planY0 + planH + 30} stroke="#64748b" strokeWidth="1" />
+                                        <text x={planX0 + planW / 2} y={planY0 + planH + 40} fill="#475569" fontSize="14" textAnchor="middle">B = {calc.B.toFixed(2)} m</text>
+                                    </svg>
+                                </div>
+                            ) : (
+                                <div className="bg-slate-50 p-6 rounded-xl border border-slate-200 flex flex-col items-center justify-center text-slate-400 print:hidden">
+                                    <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                                    <p>เปิดใช้ "ระบบฐานรากเสาเข็ม" เพื่อแสดงแปลนที่นี่</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 );
             };
@@ -702,7 +691,7 @@
 
                     <div className="grid lg:grid-cols-5 gap-8 print:gap-4 mt-6 print:mt-4">
                         <div className="lg:col-span-2 flex flex-col items-center justify-start border border-slate-200 p-4 rounded-xl print:border-none print:p-0">
-                            <h4 className="text-base font-semibold text-slate-700 mb-6 w-full text-center">แผนภาพแรงผลักด้านข้างและทิศทางของแรง (Driving Pressure Distribution)</h4>
+                            <h4 className="text-base font-semibold text-slate-700 mb-6 w-full text-center">แผนภาพแรงผลักด้านข้างและทิศทางของแรง</h4>
                             <svg viewBox="0 0 800 450" className="w-full max-w-sm h-auto">
                                 <defs>
                                     <marker id="arrow-force" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto">
@@ -981,6 +970,85 @@
                             </svg>
                         </div>
                         
+                        <div className="w-full">
+                            <StepBox title="คำนวณน้ำหนักและโมเมนต์ต้านทาน (รอบจุด Toe หน้าสุด x = 0)">
+                                <table className="w-full text-left border-collapse mt-2 text-sm">
+                                    <thead>
+                                        <tr className="border-b border-slate-300">
+                                            <th className="py-2">รายการ</th>
+                                            <th>สมการคำนวณน้ำหนัก</th>
+                                            <th>น้ำหนัก (W) กก.</th>
+                                            <th>แขน (x)</th>
+                                            <th>โมเมนต์ (M<Sub text="R"/>)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr className="border-b border-slate-100">
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#94a3b8] mr-2 border border-[#475569]"></span>W<Sub text="1"/>: ฐานรากส่วน Toe</td>
+                                            <td>C &times; T1 &times; 2400 &times; L</td>
+                                            <td>{calc.w1.toFixed(2)}</td>
+                                            <td>{calc.x1.toFixed(2)}</td>
+                                            <td>{(calc.w1 * calc.x1).toFixed(2)}</td>
+                                        </tr>
+                                        <tr className="border-b border-slate-100">
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#e2e8f0] mr-2 border border-[#475569]"></span>W<Sub text="2"/>: กำแพงส่วนสี่เหลี่ยม</td>
+                                            <td>G &times; H &times; 2400 &times; L</td>
+                                            <td>{calc.w2.toFixed(2)}</td>
+                                            <td>{calc.x2.toFixed(2)}</td>
+                                            <td>{(calc.w2 * calc.x2).toFixed(2)}</td>
+                                        </tr>
+                                        <tr className="border-b border-slate-100">
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#f1f5f9] mr-2 border border-[#475569]"></span>W<Sub text="3"/>: กำแพงส่วนสามเหลี่ยม</td>
+                                            <td>&frac12; &times; m &times; H &times; 2400 &times; L</td>
+                                            <td>{calc.w3.toFixed(2)}</td>
+                                            <td>{calc.x3.toFixed(2)}</td>
+                                            <td>{(calc.w3 * calc.x3).toFixed(2)}</td>
+                                        </tr>
+                                        <tr className="border-b border-slate-100">
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#cbd5e1] mr-2 border border-[#475569]"></span>W<Sub text="4"/>: ฐานรากส่วน Stem+Heel</td>
+                                            <td>(D + F) &times; T1 &times; 2400 &times; L</td>
+                                            <td>{calc.w4.toFixed(2)}</td>
+                                            <td>{calc.x4.toFixed(2)}</td>
+                                            <td>{(calc.w4 * calc.x4).toFixed(2)}</td>
+                                        </tr>
+                                        <tr className="border-b border-slate-100">
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#fde68a] mr-2 border border-[#d97706]"></span>W<Sub text="5"/>: ดินบนกำแพงเหนือ Stem</td>
+                                            <td>(W<Sub text="dry"/> + W<Sub text="wet"/>) &times; L</td>
+                                            <td>{calc.w5.toFixed(2)}</td>
+                                            <td>{calc.x5.toFixed(2)}</td>
+                                            <td>{(calc.w5 * calc.x5).toFixed(2)}</td>
+                                        </tr>
+                                        <tr className="border-b border-slate-100">
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#fcd34d] mr-2 border border-[#d97706]"></span>W<Sub text="6"/>: ดินแห้งบน Heel</td>
+                                            <td>F &times; d2 &times; &gamma;<Sub text="compact"/> &times; L</td>
+                                            <td>{calc.w6.toFixed(2)}</td>
+                                            <td>{calc.x6.toFixed(2)}</td>
+                                            <td>{(calc.w6 * calc.x6).toFixed(2)}</td>
+                                        </tr>
+                                        <tr className="border-b border-slate-100">
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#93c5fd] mr-2 border border-[#2563eb]"></span>W<Sub text="7"/>: ดินเปียกบน Heel</td>
+                                            <td>F &times; d3 &times; &gamma;<Sub text="sat"/> &times; L</td>
+                                            <td>{calc.w7.toFixed(2)}</td>
+                                            <td>{calc.x7.toFixed(2)}</td>
+                                            <td>{(calc.w7 * calc.x7).toFixed(2)}</td>
+                                        </tr>
+                                        <tr className="border-b border-slate-200">
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#e0f2fe] mr-2 border border-[#0ea5e9]"></span>W<Sub text="8"/>: Surcharge บนดินถม</td>
+                                            <td>Surcharge &times; (m + F) &times; L</td>
+                                            <td>{calc.w8.toFixed(2)}</td>
+                                            <td>{calc.x8.toFixed(2)}</td>
+                                            <td>{(calc.w8 * calc.x8).toFixed(2)}</td>
+                                        </tr>
+                                        <tr className="font-bold text-slate-800 bg-slate-100">
+                                            <td colSpan="2" className="py-2 text-right pr-4">รวม (Total):</td>
+                                            <td className="text-blue-600">&Sigma;V = {calc.sumV.toFixed(2)}</td>
+                                            <td></td>
+                                            <td className="text-emerald-600">&Sigma;M<Sub text="R"/> = {calc.MR.toFixed(2)}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </StepBox>
+                        </div>
                     </div>
                 </div>
                 );
@@ -1176,7 +1244,7 @@
                                 </div>
                             </StepBox>
                         ) : (
-                            <StepBox title="1. คำนวณคุณสมบัติกลุ่มเสาเข็มรอบ CG">
+                            <StepBox title="1. คำนวณโมเมนต์รอบ CG กลุ่มเสาเข็ม (Elastic Center Method)">
                                 <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-8 mb-4">
                                     <div>
                                         <div className="text-slate-600 mb-1">ตำแหน่ง CG กลุ่มเสาเข็ม</div>
@@ -1559,11 +1627,11 @@
                             <h2 className="text-lg font-semibold text-slate-600 mt-1">Retaining Wall Stability Analysis</h2>
                         </div>
 
+                        {/* เมนูแท็บ ควบคุมการสลับหน้าเฉพาะบนหน้าจอ ไม่ปรินท์ */}
                         <div className="flex overflow-x-auto no-scrollbar border-b border-slate-300 mb-6 space-x-1 no-print">
                             {[
                                 { id: 'inputs', label: 'พารามิเตอร์ (Inputs)' },
-                                { id: 'summary', label: 'สรุปผล (Summary)' },
-                                { id: 'drawings', label: 'แปลนและรูปด้าน' },
+                                { id: 'summary', label: 'สรุปผลและแปลน (Dashboard)' },
                                 { id: 'driving', label: 'แรงผลัก (Driving)' },
                                 { id: 'resisting', label: 'แรงต้าน (Resisting)' },
                                 { id: 'stability', label: 'ตรวจสอบเสถียรภาพ' },
@@ -1584,8 +1652,7 @@
 
                         <main className="print:flex print:flex-col print:gap-8">
                             <div className={activeTab === 'inputs' ? 'block' : 'hidden print:block print:break-inside-avoid'}>{TabInputs()}</div>
-                            <div className={activeTab === 'summary' ? 'block' : 'hidden print:block print:break-inside-avoid'}>{TabSummary()}</div>
-                            <div className={activeTab === 'drawings' ? 'block' : 'hidden print:block print:break-inside-avoid'}>{TabDrawings()}</div>
+                            <div className={activeTab === 'summary' ? 'block' : 'hidden print:block print:break-inside-avoid'}>{TabDashboard()}</div>
                             <div className={activeTab === 'driving' ? 'block' : 'hidden print:block print:break-inside-avoid'}>{TabDriving()}</div>
                             <div className={activeTab === 'resisting' ? 'block' : 'hidden print:block print:break-inside-avoid'}>{TabResisting()}</div>
                             <div className={activeTab === 'stability' ? 'block' : 'hidden print:block print:break-inside-avoid'}>{TabStability()}</div>
