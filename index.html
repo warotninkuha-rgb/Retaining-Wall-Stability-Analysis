@@ -98,8 +98,8 @@
             const [activeTab, setActiveTab] = useState('inputs'); // Default tab is now Inputs
 
             // Global Inputs State
-            const [soil, setSoil] = useState({ gamma_c: 1900, gamma_sat: 2100, phi: 30 });
-            const [base, setBase] = useState({ f: 0.5, q_allow: 8000 });
+            const [soil, setSoil] = useState({ gamma_c: 1900, gamma_sat: 2100, phi_backfill: 30, phi_base: 30 });
+            const [base, setBase] = useState({ q_allow: 8000 }); // เอา f ออกจาก State ให้คำนวณอัตโนมัติ
             const [surcharge, setSurcharge] = useState(500);
             const [designLength, setDesignLength] = useState(1.0);
             
@@ -137,7 +137,11 @@
                 // Soil Mechanics
                 const gamma_w = 1000;
                 const gamma_sub = soil.gamma_sat - gamma_w;
-                const Ka = Math.pow(Math.tan((45 - soil.phi/2) * Math.PI/180), 2);
+                const Ka = Math.pow(Math.tan((45 - soil.phi_backfill/2) * Math.PI/180), 2);
+                
+                // คำนวณสัมประสิทธิ์ไถล (f) อัตโนมัติจาก f = tan(2/3 * phi_base)
+                const f_calc = Math.tan((2/3) * soil.phi_base * Math.PI / 180);
+
                 const L = designLength;
                 
                 // Geometry logic
@@ -208,9 +212,9 @@
                 const sumV = w1 + w2 + w3 + w4 + w5 + w6 + w7 + w8;
                 const MR = (w1*x1) + (w2*x2) + (w3*x3) + (w4*x4) + (w5*x5) + (w6*x6) + (w7*x7) + (w8*x8);
 
-                // Stability
+                // Stability (ใช้ f_calc แทน)
                 const FS_ot = MR / MO;
-                const FS_slide = (base.f * sumV) / sumP;
+                const FS_slide = (f_calc * sumV) / sumP;
 
                 // Bearing
                 const X_bar = (MR - MO) / sumV;
@@ -235,7 +239,8 @@
                 let M_design_sp = 0;
                 let P_design_sp = 0;
                 
-                const P_excess = Math.max(0, 1.5 * sumP - base.f * sumV);
+                // ใช้ f_calc ในการหาส่วนเกินการลื่นไถล
+                const P_excess = Math.max(0, 1.5 * sumP - f_calc * sumV);
                 const M_excess = Math.max(0, 1.5 * MO - MR);
                 const V_allow_soil = base.q_allow > 0 ? (base.q_allow * B * L) / (1 + 6 * Math.abs(e) / B) : 0;
                 const V_excess = Math.max(0, sumV - V_allow_soil);
@@ -270,6 +275,7 @@
                 }
 
                 return {
+                    f_calc,
                     B, m, Ka, gamma_w, gamma_sub, d2, d3, H_tot, L,
                     p1, P1, y1, p2, P2_tri, y2_tri, P2_rect, y2_rect, P2, p3, P3, y3, p4, P4, y4, sumP, MO,
                     w1, x1, w2, x2, w3, x3, w4, x4, w5, x5, w6, x6, w7, x7, w8, x8, sumV, MR,
@@ -348,12 +354,24 @@
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 gap-x-6 gap-y-2">
                             <InputRow label={<span>&gamma;<Sub text="c"/> (กดทับ)</span>} value={soil.gamma_c} onChange={handleNum(setSoil, 'gamma_c')} unit={<span>กก./ม.&sup3;</span>} />
                             <InputRow label={<span>&gamma;<Sub text="sat"/> (อิ่มตัว)</span>} value={soil.gamma_sat} onChange={handleNum(setSoil, 'gamma_sat')} unit={<span>กก./ม.&sup3;</span>} />
-                            <InputRow label={<span>มุมเสียดทาน &phi;</span>} value={soil.phi} onChange={handleNum(setSoil, 'phi')} unit="องศา" warning={(soil.phi < 15 || soil.phi > 45) ? "ค่าแปลก" : null} />
                             <InputRow label="ความยาวคำนวณ (L)" value={designLength} onChange={(e) => setDesignLength(parseFloat(e.target.value)||1)} unit="ม." />
                             
-                            <InputRow label="สัมประสิทธิ์ไถล (f)" value={base.f} onChange={handleNum(setBase, 'f')} unit="" />
-                            <InputRow label={<span>q<Sub text="allow"/> ดินเดิม</span>} value={base.q_allow} onChange={handleNum(setBase, 'q_allow')} unit={<span>กก./ม.&sup2;</span>} />
+                            <InputRow label={<span>มุมเสียดทานดินถม &phi;<Sub text="backfill"/></span>} value={soil.phi_backfill} onChange={handleNum(setSoil, 'phi_backfill')} unit="องศา" warning={(soil.phi_backfill < 15 || soil.phi_backfill > 45) ? "ค่าแปลก" : null} />
+                            <InputRow label={<span>มุมเสียดทานดินใต้ฐาน &phi;<Sub text="base"/></span>} value={soil.phi_base} onChange={handleNum(setSoil, 'phi_base')} unit="องศา" warning={(soil.phi_base < 15 || soil.phi_base > 45) ? "ค่าแปลก" : null} />
+                            
+                            {/* แทนที่ฟิลด์รับค่า f ด้วยกล่องแสดงผลที่คำนวณอัตโนมัติ */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 rounded-md transition-colors border border-transparent bg-slate-50 print:flex-row print:py-1 print:px-1">
+                                <span className="text-slate-700 text-sm mb-1 sm:mb-0 mr-2 flex-1 leading-tight">สัมประสิทธิ์ไถล (f)</span>
+                                <div className="flex items-center flex-shrink-0 self-start sm:self-auto">
+                                    <div className="w-20 sm:w-24 p-1.5 border border-slate-300 rounded text-right text-sm bg-slate-100 text-blue-700 font-bold shadow-sm print:shadow-none print:p-1 print:border-none print:bg-transparent">
+                                        {calc.f_calc.toFixed(3)}
+                                    </div>
+                                    <span className="text-slate-500 ml-2 text-[10px] w-8 text-left leading-tight">คำนวณจาก<br/>(2/3)&phi;<Sub text="base"/></span>
+                                </div>
+                            </div>
+
                             <InputRow label="Surcharge (จร)" value={surcharge} onChange={(e) => setSurcharge(parseFloat(e.target.value)||0)} unit={<span>กก./ม.&sup2;</span>} bgClass="bg-amber-50 border-amber-100 print:bg-transparent print:border-transparent" />
+                            <InputRow label={<span>q<Sub text="allow"/> ดินเดิม</span>} value={base.q_allow} onChange={handleNum(setBase, 'q_allow')} unit={<span>กก./ม.&sup2;</span>} />
                         </div>
                     </div>
 
@@ -491,7 +509,10 @@
                 const planY0 = 50;
 
                 return (
-                    <div className="space-y-6 animate-[fadeIn_0.3s_ease-in-out]">
+                    <div className="space-y-6 animate-[fadeIn_0.3s_ease-in-out] print:break-inside-avoid print:mt-6 print:border-t print:border-slate-800 print:pt-4">
+                        {/* หัวข้อสำหรับหน้าปริ๊น เพื่อความชัดเจนว่าเริ่มโซนสรุปผลและไดอะแกรมแล้ว */}
+                        <h3 className="hidden print:block font-bold text-lg text-slate-800 mb-4 uppercase">สรุปผลและไดอะแกรม (Dashboard & Diagrams)</h3>
+                        
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-6 print:gap-4">
                             <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
                                 <span className="text-slate-500 text-sm mb-3 font-medium">Overturning (F.S.)</span>
@@ -1069,7 +1090,7 @@
                         <div>&Sigma;M<Sub text="O"/> = {calc.MO.toFixed(2)} กก.-ม.</div>
                         <div>&Sigma;V = {calc.sumV.toFixed(2)} กก.</div>
                         <div>&Sigma;P = {calc.sumP.toFixed(2)} กก.</div>
-                        <div>f (แรงเสียดทาน) = {base.f.toFixed(2)}</div>
+                        <div>f (แรงเสียดทาน) = {calc.f_calc.toFixed(3)}</div>
                     </div>
 
                     <StepBox title="1. ตรวจสอบการพลิกคว่ำ (Overturning)">
@@ -1095,7 +1116,7 @@
                             <span>F.S.<Sub text="Slide"/> = </span>
                             <Fraction top={<span>f &times; &Sigma;V</span>} bottom={<span>&Sigma;P</span>} />
                             <span>=</span>
-                            <Fraction top={`${base.f} &times; ${calc.sumV.toFixed(2)}`} bottom={calc.sumP.toFixed(2)} />
+                            <Fraction top={`${calc.f_calc.toFixed(3)} \u00D7 ${calc.sumV.toFixed(2)}`} bottom={calc.sumP.toFixed(2)} />
                             <span className="font-bold text-lg">= {calc.FS_slide.toFixed(2)}</span>
                         </div>
                         <div className="mt-3">
@@ -1370,7 +1391,7 @@
                         <h3 className="font-bold text-lg text-slate-700 border-b pb-2">รายการคำนวณ (Detailed Calculations)</h3>
                         
                         <StepBox title="1. สัมประสิทธิ์แรงดันดินรุก (Rankine)">
-                            K<Sub text="a"/> = tan&sup2;(45 - &phi;/2) = tan&sup2;(45 - {soil.phi}/2) = <strong className="text-blue-600">{calc.Ka.toFixed(3)}</strong>
+                            K<Sub text="a"/> = tan&sup2;(45 - &phi;<Sub text="backfill"/>/2) = tan&sup2;(45 - {soil.phi_backfill}/2) = <strong className="text-blue-600">{calc.Ka.toFixed(3)}</strong>
                         </StepBox>
 
                         <StepBox title="2. คำนวณหน่วยแรงดันดินด้านข้าง (Lateral Pressures, p)">
@@ -1458,6 +1479,7 @@
                                 </tbody>
                             </table>
                         </StepBox>
+
                     </div>
                 );
             }
@@ -1489,9 +1511,10 @@
                                     <li><strong>&gamma;<Sub text="sat"/>:</strong> หน่วยน้ำหนักดินอิ่มตัวด้วยน้ำ (ใต้ระดับน้ำ)</li>
                                     <li><strong>&gamma;<Sub text="w"/>:</strong> หน่วยน้ำหนักของน้ำ (1000 กก./ม.&sup3;)</li>
                                     <li><strong>&gamma;<Sub text="sub"/>:</strong> หน่วยน้ำหนักดินจมตัว (&gamma;<Sub text="sat"/> - &gamma;<Sub text="w"/>)</li>
-                                    <li><strong>&phi; (Phi):</strong> มุมเสียดทานภายในของดิน</li>
+                                    <li><strong>&phi;<Sub text="backfill"/>:</strong> มุมเสียดทานภายในของดินถมด้านหลัง (ใช้คำนวณ Ka)</li>
+                                    <li><strong>&phi;<Sub text="base"/>:</strong> มุมเสียดทานภายในของดินเดิมใต้ฐาน (ใช้คำนวณ f)</li>
                                     <li><strong>Ka:</strong> สัมประสิทธิ์แรงดันดินรุก (Active Earth Pressure)</li>
-                                    <li><strong>f:</strong> สัมประสิทธิ์ความเสียดทานระหว่างดินกับก้นฐานราก</li>
+                                    <li><strong>f:</strong> สัมประสิทธิ์การไถล (คำนวณอัตโนมัติจาก f = tan(2/3 &times; &phi;<Sub text="base"/>))</li>
                                     <li><strong>q<Sub text="allow"/>:</strong> กำลังรับน้ำหนักปลอดภัยของดิน</li>
                                     <li><strong>Surcharge:</strong> น้ำหนักบรรทุกจรที่กดทับบนผิวดิน</li>
                                 </ul>
@@ -1561,11 +1584,11 @@
                                 { id: 'inputs', label: 'พารามิเตอร์ (Inputs)' },
                                 { id: 'summary', label: 'สรุปผลและแปลน (Dashboard)' },
                                 { id: 'driving', label: 'แรงผลัก (Driving)' },
+                                { id: 'calculations', label: 'รายการคำนวณ' },
                                 { id: 'resisting', label: 'แรงต้าน (Resisting)' },
                                 { id: 'stability', label: 'ตรวจสอบเสถียรภาพ' },
                                 { id: 'bearing', label: 'แรงอัดดินเดิม' },
                                 { id: 'piles', label: 'แรงเสาเข็ม (Piles)' },
-                                { id: 'calculations', label: 'รายการคำนวณ' },
                                 { id: 'manual', label: 'คู่มือ' }
                             ].map(tab => (
                                 <button
@@ -1582,11 +1605,11 @@
                             <div className={`print:block ${activeTab === 'inputs' ? 'block' : 'hidden'}`}>{TabInputs()}</div>
                             <div className={`print:block ${activeTab === 'summary' ? 'block' : 'hidden'}`}>{TabDashboard()}</div>
                             <div className={`print:block ${activeTab === 'driving' ? 'block' : 'hidden'}`}>{TabDriving()}</div>
+                            <div className={`print:block ${activeTab === 'calculations' ? 'block' : 'hidden'}`}>{TabCalculations()}</div>
                             <div className={`print:block ${activeTab === 'resisting' ? 'block' : 'hidden'}`}>{TabResisting()}</div>
                             <div className={`print:block ${activeTab === 'stability' ? 'block' : 'hidden'}`}>{TabStability()}</div>
                             <div className={`print:block ${activeTab === 'bearing' ? 'block' : 'hidden'}`}>{TabBearing()}</div>
                             <div className={`print:block ${activeTab === 'piles' ? 'block' : 'hidden'}`}>{TabPiles()}</div>
-                            <div className={`print:block ${activeTab === 'calculations' ? 'block' : 'hidden'}`}>{TabCalculations()}</div>
                             <div className={`print:hidden ${activeTab === 'manual' ? 'block' : 'hidden'}`}>{TabManual()}</div>
                         </main>
                     </div>
