@@ -84,7 +84,7 @@
 
         // Custom Input Component for standardizing layout (Flex-col on mobile, Flex-row on larger screens)
         const InputRow = ({ label, value, onChange, unit, warning, bgClass = "" }) => (
-            <div className={`flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 rounded-md transition-colors border border-transparent hover:border-slate-200 hover:bg-slate-50 print:flex-row print:py-1 print:px-1 ${bgClass}`}>
+            <div className={`flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 rounded-md transition-colors border border-transparent hover:border-slate-200 hover:bg-slate-50 print:flex-row print:items-center print:py-1 print:px-1 ${bgClass}`}>
                 <span className="text-slate-700 text-sm mb-1 sm:mb-0 mr-2 flex-1 leading-tight">{label}</span>
                 <div className="flex items-center flex-shrink-0 self-start sm:self-auto">
                     {warning && <span className="text-rose-500 text-xs mr-2 whitespace-nowrap no-print">{warning}</span>}
@@ -93,7 +93,7 @@
                         className="w-20 sm:w-24 p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 text-sm bg-white shadow-sm print:shadow-none print:p-1" 
                         value={value} onChange={onChange} 
                     />
-                    <span className="text-slate-500 ml-2 text-sm w-8 text-left">{unit}</span>
+                    <span className="text-slate-500 ml-2 text-sm whitespace-nowrap min-w-[2.5rem] text-left">{unit}</span>
                 </div>
             </div>
         );
@@ -341,7 +341,7 @@
                             <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-2 sm:mb-0">มิติโครงสร้างกำแพงกันดิน (Wall Dimensions)</h3>
                             <span className="text-xs text-slate-600 font-medium bg-slate-100 print:bg-transparent px-3 py-1 rounded-full border border-slate-200 print:border-none">ความกว้างฐานรวม (B) = <span className="font-bold text-blue-600">{calc.B.toFixed(2)} ม.</span></span>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 gap-x-6 gap-y-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 print:grid-cols-2 gap-x-6 gap-y-2">
                             <InputRow label="สูง (H)" value={geom.H} onChange={handleNum(setGeom, 'H')} unit="ม." />
                             <InputRow label="ยื่นหน้า Toe (C)" value={geom.C} onChange={handleNum(setGeom, 'C')} unit="ม." />
                             <InputRow label="กว้างยอดกำแพง (G)" value={geom.G} onChange={handleNum(setGeom, 'G')} unit="ม." />
@@ -355,7 +355,7 @@
                     {/* Box 2: พารามิเตอร์ดิน */}
                     <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 print:p-4 print:break-inside-avoid">
                         <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-4 border-b border-slate-100 pb-3 print:mb-3">พารามิเตอร์การออกแบบดินและน้ำหนัก (Soil & Load Parameters)</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 print:grid-cols-3 gap-x-6 gap-y-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 print:grid-cols-2 gap-x-6 gap-y-2">
                             <InputRow label={<span>&gamma;<Sub text="c"/> (กดทับ)</span>} value={soil.gamma_c} onChange={handleNum(setSoil, 'gamma_c')} unit={<span>กก./ม.&sup3;</span>} />
                             <InputRow label={<span>&gamma;<Sub text="sat"/> (อิ่มตัว)</span>} value={soil.gamma_sat} onChange={handleNum(setSoil, 'gamma_sat')} unit={<span>กก./ม.&sup3;</span>} />
                             <InputRow label="ความยาวคำนวณ (L)" value={designLength} onChange={(e) => setDesignLength(parseFloat(e.target.value)||1)} unit="ม." />
@@ -364,13 +364,13 @@
                             <InputRow label={<span>มุมเสียดทานดินใต้ฐาน &phi;<Sub text="base"/></span>} value={soil.phi_base} onChange={handleNum(setSoil, 'phi_base')} unit="องศา" warning={(soil.phi_base < 15 || soil.phi_base > 45) ? "ค่าแปลก" : null} />
                             
                             {/* แทนที่ฟิลด์รับค่า f ด้วยกล่องแสดงผลที่คำนวณอัตโนมัติ */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 rounded-md transition-colors border border-transparent bg-slate-50 print:flex-row print:py-1 print:px-1">
-                                <span className="text-slate-700 text-sm mb-1 sm:mb-0 mr-2 flex-1 leading-tight">สัมประสิทธิ์ไถล (f)</span>
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between py-2 px-3 rounded-md transition-colors border border-transparent bg-slate-50 print:flex-row print:items-center print:py-1 print:px-1">
+                                <span className="text-slate-700 text-sm mb-1 sm:mb-0 mr-2 flex-1 leading-tight whitespace-nowrap">สัมประสิทธิ์ไถล (f)</span>
                                 <div className="flex items-center flex-shrink-0 self-start sm:self-auto">
                                     <div className="w-20 sm:w-24 p-1.5 border border-slate-300 rounded text-right text-sm bg-slate-100 text-blue-700 font-bold shadow-sm print:shadow-none print:p-1 print:border-none print:bg-transparent">
                                         {calc.f_calc.toFixed(3)}
                                     </div>
-                                    <span className="text-slate-500 ml-2 text-[10px] w-8 text-left leading-tight">คำนวณจาก<br/>(2/3)&phi;<Sub text="base"/></span>
+                                    <span className="text-slate-500 ml-2 text-[10px] whitespace-nowrap min-w-[2.5rem] text-left leading-tight">คำนวณจาก<br/>(2/3)&phi;<Sub text="base"/></span>
                                 </div>
                             </div>
 
