@@ -143,8 +143,8 @@
                 const gamma_sub = soil.gamma_sat - gamma_w;
                 const Ka = Math.pow(Math.tan((45 - soil.phi_backfill/2) * Math.PI/180), 2);
                 
-                // คำนวณสัมประสิทธิ์ไถล (f) อัตโนมัติจาก f = tan(2/3 * phi_base)
-                const f_calc = Math.tan((2/3) * soil.phi_base * Math.PI / 180);
+                // คำนวณสัมประสิทธิ์ไถล (f) อัตโนมัติจาก f = tan(phi_base) สำหรับคอนกรีตหล่อในที่
+                const f_calc = Math.tan(soil.phi_base * Math.PI / 180);
 
                 const L = designLength;
                 
@@ -370,7 +370,7 @@
                                     <div className="w-20 sm:w-24 p-1.5 border border-slate-300 rounded text-right text-sm bg-slate-100 text-blue-700 font-bold shadow-sm print:shadow-none print:p-1 print:border-none print:bg-transparent">
                                         {calc.f_calc.toFixed(3)}
                                     </div>
-                                    <span className="text-slate-500 ml-2 text-[10px] whitespace-nowrap min-w-[2.5rem] text-left leading-tight">คำนวณจาก<br/>(2/3)&phi;<Sub text="base"/></span>
+                                    <span className="text-slate-500 ml-2 text-[10px] whitespace-nowrap min-w-[2.5rem] text-left leading-tight">หล่อในที่<br/>tan(&phi;<Sub text="base"/>)</span>
                                 </div>
                             </div>
 
@@ -1562,7 +1562,7 @@
                                     <li><strong>&phi;<Sub text="backfill"/>:</strong> มุมเสียดทานภายในของดินถมด้านหลัง (ใช้คำนวณ Ka)</li>
                                     <li><strong>&phi;<Sub text="base"/>:</strong> มุมเสียดทานภายในของดินเดิมใต้ฐาน (ใช้คำนวณ f)</li>
                                     <li><strong>Ka:</strong> สัมประสิทธิ์แรงดันดินรุก (Active Earth Pressure)</li>
-                                    <li><strong>f:</strong> สัมประสิทธิ์การไถล (คำนวณอัตโนมัติจาก f = tan(2/3 &times; &phi;<Sub text="base"/>))</li>
+                                    <li><strong>f:</strong> สัมประสิทธิ์การไถล (คำนวณอัตโนมัติจาก f = tan(&phi;<Sub text="base"/>) สำหรับฐานรากคอนกรีตหล่อในที่)</li>
                                     <li><strong>q<Sub text="allow"/>:</strong> กำลังรับน้ำหนักปลอดภัยของดิน</li>
                                     <li><strong>Surcharge:</strong> น้ำหนักบรรทุกจรที่กดทับบนผิวดิน</li>
                                 </ul>
