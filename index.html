@@ -133,8 +133,11 @@
            พ่วง: [M2] ปิดระดับน้ำได้จริง  [M3] gamma_concrete เป็นค่ากรอกได้
            v2.1 — เพิ่มโมดูลตรวจแรงด้านข้างของเสาเข็ม (Broms + เกณฑ์ระยะโก่ง + M_cr)
                   พร้อมช่องกรอก c_u และให้ค่าที่คำนวณได้คุม allowShear อัตโนมัติ
+           v2.2 — แก้บั๊ก: ป้ายตรวจแรงเฉือนอ่าน pile.allowShear แต่เงื่อนไขใช้ shearCap
+                  ทำให้ขึ้นข้อความขัดแย้งเช่น "<= 0 (ผ่าน)" ตอนนี้ทุกจุดอ้าง calc.shearCap
+                  และกำลัง <= 0 ถือว่าไม่ผ่าน (เดิมเป็น 0 <= 0 = ผ่าน)
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v2.1 (แก้ไข C1-C6 + โมดูล Broms)';
+        const APP_VERSION = 'v2.2 (C1-C6 + Broms + แก้ป้ายแรงเฉือน)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -566,9 +569,15 @@
 
                 const okPileComp  = pile_results.every(p => p.p_comp <= pile.allowComp);
                 const okPileTen   = pile_results.every(p => Math.abs(p.p_ten) <= pile.allowTen);
-                /* allowShear มาจากโมดูล Broms ถ้าเปิดใช้ มิฉะนั้นใช้ค่าที่กรอกเอง */
-                const shearCap    = (lat.enabled && lat.useForCheck) ? lateral.H_allow_kg : pile.allowShear;
-                const okPileShear = V_shear_pile <= shearCap;
+                /* ═══ กำลังรับแรงเฉือนของเสาเข็ม — แหล่งความจริงเดียว ═══
+                   ทุกจุดที่แสดงผลต้องอ้าง shearCap ตัวนี้ ห้ามอ่าน pile.allowShear ตรงๆ
+                   มิฉะนั้นป้ายกับเงื่อนไขจะไม่ตรงกัน */
+                const shearFromBroms = lat.enabled && lat.useForCheck;
+                const shearCap       = shearFromBroms ? lateral.H_allow_kg : pile.allowShear;
+                /* กำลัง <= 0 ไม่ใช่ "ผ่าน" แต่แปลว่ายังไม่ได้กำหนดกำลัง จึงต้องไม่ผ่าน */
+                const shearCapValid  = shearCap > 0;
+                const okPileShear    = shearCapValid && V_shear_pile <= shearCap;
+                const shearRatio     = shearCapValid ? V_shear_pile / shearCap : Infinity;
 
                 /* ค่าที่คงชื่อเดิมไว้เพื่อความเข้ากันได้กับส่วนแสดงผล */
                 const V_pile = govPile ? govPile.V_grp : 0;
@@ -589,7 +598,8 @@
                     B_eff, bearingMode, peakAt, bearingValid,
                     okOT, okSlide, okBear, okEcc,
                     W5_dry, W5_wet,
-                    N_piles, x_cg_pile, sum_d2, pile_results, V_shear_pile, shearCap,
+                    N_piles, x_cg_pile, sum_d2, pile_results, V_shear_pile,
+                    shearCap, shearFromBroms, shearCapValid, shearRatio,
                     pc1, pc2, govPile, okPileComp, okPileTen, okPileShear,
                     V_pile, P_pile, M_cg_pile, V_design_sp, M_design_sp, P_design_sp
                 };
@@ -991,13 +1001,25 @@
                                                         <input type="number" className="w-16 sm:w-20 p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm shadow-sm print:shadow-none print:border-slate-300" value={pile.allowTen} onChange={handlePileNum('allowTen')} />
                                                     </div>
                                                 </div>
-                                                <div className="flex flex-col space-y-1 bg-white print:bg-transparent p-2 rounded border border-slate-100 print:border-none relative">
+                                                <div className={`flex flex-col space-y-1 p-2 rounded border relative ${calc.shearFromBroms ? 'bg-cyan-50 border-cyan-200' : 'bg-white border-slate-100'} print:bg-transparent print:border-none`}>
                                                     <span className="text-slate-500 text-[11px] sm:text-xs font-semibold text-center mb-1 leading-tight">แรงเฉือน<br className="hidden sm:block"/>(Shear)</span>
                                                     <div className="flex items-center justify-center">
-                                                        <input type="number" className="w-16 sm:w-20 p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm shadow-sm print:shadow-none print:border-slate-300" value={pile.allowShear} onChange={handlePileNum('allowShear')} />
+                                                        {calc.shearFromBroms ? (
+                                                            <div className="w-16 sm:w-20 p-1.5 border border-cyan-300 rounded text-right text-xs sm:text-sm bg-white text-cyan-800 font-bold" title="คำนวณจากโมดูล Broms ในหัวข้อ 4">
+                                                                {calc.shearCap.toFixed(0)}
+                                                            </div>
+                                                        ) : (
+                                                            <input type="number" className="w-16 sm:w-20 p-1.5 border border-slate-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm shadow-sm print:shadow-none print:border-slate-300" value={pile.allowShear} onChange={handlePileNum('allowShear')} />
+                                                        )}
                                                     </div>
-                                                    {/* ย้าย kg มาอยู่ขวาสุดของกล่องแรงเฉือน */}
                                                     <span className="text-slate-400 text-xs absolute right-0 top-[55%] sm:top-auto sm:bottom-3 translate-x-full ml-1 pr-1">kg</span>
+                                                    <span className="text-[10px] text-center leading-tight pt-0.5">
+                                                        {calc.shearFromBroms
+                                                            ? <span className="text-cyan-700 font-semibold">คำนวณจาก Broms &darr; ข้อ 4</span>
+                                                            : <span className={pile.allowShear > 0 ? 'text-slate-400' : 'text-rose-500 font-semibold'}>
+                                                                {pile.allowShear > 0 ? 'กรอกเอง' : 'ยังไม่ได้กำหนด'}
+                                                              </span>}
+                                                    </span>
                                                 </div>
                                             </div>
                                         </div>
@@ -2326,7 +2348,14 @@
                                 <div className="bg-white p-4 rounded-lg border border-slate-200 text-center shadow-sm">
                                     <div className="text-xs text-slate-500 uppercase font-semibold mb-1">แรงเฉือนต่อเข็ม</div>
                                     <div className="text-2xl font-bold text-amber-600 mb-2">{calc.V_shear_pile.toFixed(0)} <span className="text-sm text-slate-600">kg</span></div>
-                                    <Badge condition={calc.okPileShear} textTrue={`\u2264 ${pile.allowShear} (ผ่าน)`} textFalse={`\u003E ${pile.allowShear} (เกินพิกัด)`} />
+                                    {calc.shearCapValid
+                                        ? <Badge condition={calc.okPileShear}
+                                                 textTrue={`\u2264 ${calc.shearCap.toFixed(0)} (ผ่าน)`}
+                                                 textFalse={`\u003E ${calc.shearCap.toFixed(0)} (เกินพิกัด ${calc.shearRatio.toFixed(1)} เท่า)`} />
+                                        : <Badge condition={false} textFalse="ยังไม่ได้กำหนดกำลังรับแรงเฉือน" />}
+                                    <div className="text-[10px] text-slate-400 mt-2 leading-tight">
+                                        เทียบกับ {calc.shearFromBroms ? 'ค่าที่คำนวณจาก Broms' : 'ค่าที่กรอกเอง'}
+                                    </div>
                                 </div>
                             </div>
 
@@ -2408,11 +2437,11 @@
                                 <div className={`p-3 rounded-lg border-2 ${calc.okPileShear ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'} print:bg-transparent`}>
                                     <div className="text-sm">
                                         <strong>เทียบกับแรงที่ต้องรับ:</strong> V<Sub text="shear"/> = {calc.V_shear_pile.toFixed(0)} กก./ต้น
-                                        {' '}เทียบกับกำลังที่ใช้ได้ {calc.shearCap.toFixed(0)} กก.
+                                        {' '}เทียบกับกำลังที่ใช้ได้ {calc.shearCapValid ? calc.shearCap.toFixed(0) + ' กก.' : '(ยังไม่ได้กำหนด)'}
                                         {' '}{calc.okPileShear
                                             ? <span className="text-emerald-700 font-bold">ผ่านเกณฑ์</span>
-                                            : <span className="text-rose-700 font-bold">ไม่ผ่านเกณฑ์</span>}
-                                        {!lat.useForCheck && <span className="text-slate-500 text-xs"> (ใช้ค่าที่กรอกเอง ไม่ใช่ค่าจาก Broms)</span>}
+                                            : <span className="text-rose-700 font-bold">ไม่ผ่านเกณฑ์{calc.shearCapValid && ' \u2014 เกิน ' + calc.shearRatio.toFixed(1) + ' เท่า'}</span>}
+                                        {!calc.shearFromBroms && <span className="text-slate-500 text-xs"> (ใช้ค่าที่กรอกเอง ไม่ใช่ค่าจาก Broms)</span>}
                                     </div>
                                     {!calc.okPileShear && (
                                         <div className="mt-2 text-xs text-rose-800 leading-snug">
