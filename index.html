@@ -131,8 +131,10 @@
              [C5] เปลี่ยน default เป็น Full Load และแก้จุดอ้างอิงโมเมนต์ของโหมด Excess
              [C6] ตรวจสอบ 2 กรณีบรรทุก (Surcharge จรเป็น/ไม่เป็นแรงต้าน)
            พ่วง: [M2] ปิดระดับน้ำได้จริง  [M3] gamma_concrete เป็นค่ากรอกได้
+           v2.1 — เพิ่มโมดูลตรวจแรงด้านข้างของเสาเข็ม (Broms + เกณฑ์ระยะโก่ง + M_cr)
+                  พร้อมช่องกรอก c_u และให้ค่าที่คำนวณได้คุม allowShear อัตโนมัติ
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v2.0 (แก้ไข C1-C6)';
+        const APP_VERSION = 'v2.1 (แก้ไข C1-C6 + โมดูล Broms)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -194,6 +196,8 @@
             
             // Geometry State
             const [geom, setGeom] = useState({ H: 2.0, C: 0.0, D: 0.6, G: 0.25, F: 2.0, T1: 0.3, waterDepth: 1.5 });
+            // มีน้ำอยู่เหนือระดับก้นฐานรากหรือไม่ (ใช้เลือกค่า n_h แบบจมน้ำของดินทราย)
+            const calcWaterAtBase = geom.waterDepth < (geom.H + geom.T1);
 
             // Pile Foundation State
             const [pile, setPile] = useState({
@@ -208,12 +212,33 @@
 
             const [pileType, setPileType] = useState('sq26');
             const pileProfiles = {
-                'sq22': { name: 'สี่เหลี่ยมตัน 0.22x0.22 ม.', comp: 25000, ten: 7500, shear: 1500 },
-                'sq26': { name: 'สี่เหลี่ยมตัน 0.26x0.26 ม.', comp: 35000, ten: 10500, shear: 2500 },
-                'sq30': { name: 'สี่เหลี่ยมตัน 0.30x0.30 ม.', comp: 50000, ten: 15000, shear: 3500 },
-                'spun30': { name: 'กลมกลวง (Spun) D0.30 ม.', comp: 45000, ten: 13500, shear: 3000 },
+                'sq22':   { name: 'สี่เหลี่ยมตัน 0.22x0.22 ม.', comp: 25000, ten: 7500,  shear: 1500, D: 0.22, di: 0, shape: 'square' },
+                'sq26':   { name: 'สี่เหลี่ยมตัน 0.26x0.26 ม.', comp: 35000, ten: 10500, shear: 2500, D: 0.26, di: 0, shape: 'square' },
+                'sq30':   { name: 'สี่เหลี่ยมตัน 0.30x0.30 ม.', comp: 50000, ten: 15000, shear: 3500, D: 0.30, di: 0, shape: 'square' },
+                'sq40':   { name: 'สี่เหลี่ยมตัน 0.40x0.40 ม.', comp: 100000, ten: 30000, shear: 4000, D: 0.40, di: 0, shape: 'square' },
+                'spun30': { name: 'กลมกลวง (Spun) D0.30 ม.',    comp: 45000, ten: 13500, shear: 3000, D: 0.30, di: 0.18, shape: 'circle' },
                 'custom': { name: 'กำหนดค่าเอง (Custom)' }
             };
+
+            /* ═══ พารามิเตอร์วิเคราะห์แรงด้านข้าง (Broms + เกณฑ์ระยะโก่ง) ═══ */
+            const [lat, setLat] = useState({
+                enabled: true,
+                useForCheck: true,      // ให้ค่าที่คำนวณได้คุม allowShear
+                soilType: 'clay',       // 'clay' | 'sand'
+                cu: 2.5,                // ตัน/ม.² กำลังรับแรงเฉือนแบบไม่ระบายน้ำ
+                sandDensity: 'medium',  // 'loose' | 'medium' | 'dense'
+                phiLat: 30,             // องศา สำหรับดินทราย
+                fixity: 'fixed',        // 'fixed' = หัวยึดแน่นกับฐานราก | 'free' = หัวหมุนได้
+                yLimit: 6,              // มม. เกณฑ์ระยะโก่งหัวเข็ม
+                fsBroms: 2.5,           // ส่วนความปลอดภัยต่อกำลังประลัยของดิน
+                pMult: 1.0,             // ตัวคูณลดผลกลุ่มเสาเข็ม (p-multiplier)
+                D: 0.26, di: 0, shape: 'square',
+                Lpile: 20,              // ม. ความยาวเสาเข็ม
+                fcPile: 350,            // ksc
+                fpe: 50,                // ksc แรงอัดคงค้างจากลวดอัดแรง
+                eiFactor: 0.5,          // ตัวคูณ EI หน้าตัดแตกร้าว
+                muFactor: 1.6           // M_u ประมาณเป็นกี่เท่าของ M_cr
+            });
 
             // Layer Visibility State 
             const [showP1, setShowP1] = useState(true);
@@ -221,6 +246,98 @@
             const [showP2Rect, setShowP2Rect] = useState(true);
             const [showP3, setShowP3] = useState(true);
             const [showP4, setShowP4] = useState(true);
+
+            /* ═══════════════════════════════════════════════════════════════════
+               โมดูลตรวจแรงด้านข้างของเสาเข็ม
+               หน่วยภายใน: kN, m  แล้วแปลงเป็น kgf ตอนแสดงผล
+               ตรวจ 3 กลไก แล้วใช้ค่าที่ต่ำสุด:
+                 (1) เกณฑ์ระยะโก่งหัวเข็ม  - คานบนฐานยืดหยุ่น (Hetenyi / Reese-Matlock)
+                 (2) หน้าตัดเริ่มแตกร้าว    - M_cr จากคุณสมบัติหน้าตัด
+                 (3) กำลังประลัยของดิน      - Broms หาร F.S.
+               ═══════════════════════════════════════════════════════════════════ */
+            const lateral = useMemo(() => {
+                const KGF = 0.00980665;                 // kN ต่อ 1 kgf
+                const toKg = (kN) => kN / KGF;
+                const D = Math.max(0.01, lat.D);
+                const di = Math.max(0, Math.min(lat.di, D * 0.95));
+
+                /* คุณสมบัติหน้าตัด */
+                const I = lat.shape === 'circle'
+                    ? Math.PI * (Math.pow(D, 4) - Math.pow(di, 4)) / 64
+                    : Math.pow(D, 4) / 12;
+                const Zs = lat.shape === 'circle' ? (2 * I / D) : Math.pow(D, 3) / 6;
+
+                const fc_MPa  = Math.max(1, lat.fcPile) * 0.0980665;
+                const fpe_MPa = Math.max(0, lat.fpe) * 0.0980665;
+                const Ec_MPa  = 4700 * Math.sqrt(fc_MPa);
+                const EI      = Math.max(1e-6, lat.eiFactor) * Ec_MPa * 1000 * I;   // kN.m2
+                const fr_MPa  = 0.62 * Math.sqrt(fc_MPa);
+                const Mcr     = (fr_MPa + fpe_MPa) * 1000 * Zs;                     // kN.m
+                const My      = Math.max(lat.muFactor, 1.0) * Mcr;                  // kN.m
+                const isFixed = lat.fixity === 'fixed';
+                const nHinge  = isFixed ? 2 : 1;
+
+                let k = 0, beta = 0, T = 0, charLen = 0;
+                let y_per_H = 0, M_per_H = 0, H_ult = 0, longOK = true, longCrit = '';
+                const cu_kPa = Math.max(0.1, lat.cu) * 9.80665;                     // ตัน/ม.2 -> kPa
+
+                if (lat.soilType === 'clay') {
+                    /* ดินเหนียว: โมดูลัสคงที่ตามความลึก  k = 67 c_u (Davisson) */
+                    k = 67 * cu_kPa;                                                // kN/m2
+                    beta = Math.pow(k / (4 * EI), 0.25);                            // 1/m
+                    charLen = 1 / beta;
+                    y_per_H = isFixed ? (beta / k) : (2 * beta / k);                // m ต่อ kN
+                    M_per_H = isFixed ? (1 / (2 * beta)) : (0.322 / beta);          // kN.m ต่อ kN
+                    /* Broms ดินเหนียว: p_u = 9 c_u D ที่ z > 1.5D
+                       n*M_y = H(1.5D + 0.5f) , f = H/(9 c_u D)  ->  aH^2 + bH - n*M_y = 0 */
+                    const a = 1 / (18 * cu_kPa * D), b = 1.5 * D;
+                    H_ult = (-b + Math.sqrt(b * b + 4 * a * nHinge * My)) / (2 * a);
+                    longOK = beta * lat.Lpile >= 2.5;
+                    longCrit = '\u03B2L = ' + (beta * lat.Lpile).toFixed(2) + ' (ต้อง \u2265 2.5)';
+                } else {
+                    /* ดินทราย: โมดูลัสเพิ่มตามความลึก  k = n_h z  (Reese-Matlock) */
+                    const submerged = calcWaterAtBase;
+                    const NH = { loose: [2200, 1300], medium: [6600, 4400], dense: [17600, 10900] };
+                    const nh = (NH[lat.sandDensity] || NH.medium)[submerged ? 1 : 0];  // kN/m3
+                    T = Math.pow(EI / nh, 0.2);
+                    charLen = T;
+                    y_per_H = (isFixed ? 0.93 : 2.43) * Math.pow(T, 3) / EI;
+                    M_per_H = (isFixed ? 0.93 : 0.77) * T;
+                    /* Broms ดินทราย: p_u = 3 K_p gamma' D z
+                       n*M_y = 0.5467 H^1.5 / sqrt(K_p gamma' D) */
+                    const Kp = Math.pow(Math.tan((45 + lat.phiLat / 2) * Math.PI / 180), 2);
+                    const g_eff = (submerged ? 1100 : 1800) * 0.00980665;              // kN/m3
+                    const denom = Math.sqrt(Math.max(1e-9, Kp * g_eff * D));
+                    H_ult = Math.pow(nHinge * My * denom / 0.5467, 2 / 3);
+                    longOK = lat.Lpile / T >= 4;
+                    longCrit = 'L/T = ' + (lat.Lpile / T).toFixed(2) + ' (ต้อง \u2265 4)';
+                }
+
+                const H_defl  = y_per_H > 0 ? (Math.max(0, lat.yLimit) / 1000) / y_per_H : 0;
+                const H_crack = M_per_H > 0 ? Mcr / M_per_H : 0;
+                const H_broms = H_ult / Math.max(0.1, lat.fsBroms);
+
+                const modes = [
+                    { key: 'defl',  label: 'เกณฑ์ระยะโก่ง ' + lat.yLimit + ' มม.', H: H_defl },
+                    { key: 'crack', label: 'หน้าตัดเริ่มแตกร้าว (M_cr)',            H: H_crack },
+                    { key: 'broms', label: 'Broms ประลัย / F.S. ' + lat.fsBroms,   H: H_broms }
+                ];
+                let gov = modes[0];
+                modes.forEach(m => { if (m.H < gov.H) gov = m; });
+
+                const pMult = Math.max(0.1, Math.min(1, lat.pMult));
+                const H_allow = gov.H * pMult;
+                const M_at_allow = H_allow / pMult * M_per_H;
+
+                return {
+                    I, Zs, Ec_MPa, EI, Mcr, My, isFixed, nHinge,
+                    k, beta, T, charLen, y_per_H, M_per_H,
+                    H_defl, H_crack, H_ult, H_broms, modes, gov,
+                    pMult, H_allow, M_at_allow, longOK, longCrit, cu_kPa,
+                    H_allow_kg: toKg(H_allow), Mcr_tm: Mcr / 9.80665, My_tm: My / 9.80665,
+                    toKg
+                };
+            }, [lat, calcWaterAtBase]);
 
             const calc = useMemo(() => {
                 const gamma_w = 1000;
@@ -449,7 +566,9 @@
 
                 const okPileComp  = pile_results.every(p => p.p_comp <= pile.allowComp);
                 const okPileTen   = pile_results.every(p => Math.abs(p.p_ten) <= pile.allowTen);
-                const okPileShear = V_shear_pile <= pile.allowShear;
+                /* allowShear มาจากโมดูล Broms ถ้าเปิดใช้ มิฉะนั้นใช้ค่าที่กรอกเอง */
+                const shearCap    = (lat.enabled && lat.useForCheck) ? lateral.H_allow_kg : pile.allowShear;
+                const okPileShear = V_shear_pile <= shearCap;
 
                 /* ค่าที่คงชื่อเดิมไว้เพื่อความเข้ากันได้กับส่วนแสดงผล */
                 const V_pile = govPile ? govPile.V_grp : 0;
@@ -470,12 +589,12 @@
                     B_eff, bearingMode, peakAt, bearingValid,
                     okOT, okSlide, okBear, okEcc,
                     W5_dry, W5_wet,
-                    N_piles, x_cg_pile, sum_d2, pile_results, V_shear_pile,
+                    N_piles, x_cg_pile, sum_d2, pile_results, V_shear_pile, shearCap,
                     pc1, pc2, govPile, okPileComp, okPileTen, okPileShear,
                     V_pile, P_pile, M_cg_pile, V_design_sp, M_design_sp, P_design_sp
                 };
             }, [soil, base, surcharge, geom, designLength, pile, pileRows,
-                pressureMode, useUplift, upliftMode, fsOtReq, fsSlideReq, gamma_conc]);
+                pressureMode, useUplift, upliftMode, fsOtReq, fsSlideReq, gamma_conc, lat, lateral]);
 
             const handleNum = (setter, field) => (e) => {
                 setter(prev => ({ ...prev, [field]: parseFloat(e.target.value) || 0 }));
@@ -496,8 +615,40 @@
                         allowTen: pileProfiles[val].ten,
                         allowShear: pileProfiles[val].shear
                     }));
+                    setLat(prev => ({
+                        ...prev,
+                        D: pileProfiles[val].D,
+                        di: pileProfiles[val].di,
+                        shape: pileProfiles[val].shape
+                    }));
                 }
             };
+
+            const handleLat = (field) => (e) => {
+                const v = e.target.value;
+                setLat(prev => Object.assign({}, prev, { [field]: (v === 'clay' || v === 'sand' || v === 'fixed' ||
+                    v === 'free' || v === 'loose' || v === 'medium' || v === 'dense' || v === 'square' || v === 'circle')
+                    ? v : (parseFloat(v) || 0) }));
+            };
+
+            /* ช่องกรอกขนาดเล็กสำหรับโมดูลแรงด้านข้าง */
+            const LatField = ({ label, value, onChange, unit, opts }) => (
+                <div className="flex flex-col">
+                    <span className="text-[11px] text-slate-500 leading-tight mb-1">{label}</span>
+                    {opts ? (
+                        <select className="w-full text-xs p-1.5 border border-slate-300 rounded bg-white text-slate-700 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                            value={value} onChange={onChange}>
+                            {opts.map(o => <option key={o[0]} value={o[0]}>{o[1]}</option>)}
+                        </select>
+                    ) : (
+                        <div className="flex items-center">
+                            <input type="number" step="0.01" className="w-full p-1.5 border border-slate-300 rounded text-right text-xs bg-white focus:outline-none focus:ring-1 focus:ring-cyan-500 print:shadow-none"
+                                value={value} onChange={onChange} />
+                            {unit && <span className="text-slate-500 ml-1 text-[10px] whitespace-nowrap">{unit}</span>}
+                        </div>
+                    )}
+                </div>
+            );
 
             const addPileRow = () => setPileRows([...pileRows, parseFloat(((geom.C + geom.D + geom.F)/2).toFixed(2))]);
             const removePileRow = (index) => setPileRows(pileRows.filter((_, i) => i !== index));
@@ -865,6 +1016,86 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            )}
+
+                            {/* ═══ โมดูลตรวจแรงด้านข้าง (Broms + เกณฑ์ระยะโก่ง) ═══ */}
+                            {pile.usePiles && (
+                                <div className="mt-6 pt-5 border-t-2 border-dashed border-cyan-200">
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                                        <label className="flex items-center space-x-3 cursor-pointer">
+                                            <input type="checkbox" className="w-5 h-5 accent-cyan-600 rounded"
+                                                checked={lat.enabled}
+                                                onChange={(e) => setLat(prev => Object.assign({}, prev, { enabled: e.target.checked }))} />
+                                            <h4 className="text-sm font-bold text-cyan-800 uppercase tracking-wider">4. กำลังรับแรงด้านข้างของเสาเข็ม (Broms)</h4>
+                                        </label>
+                                        {lat.enabled && (
+                                            <label className="flex items-center space-x-2 cursor-pointer mt-2 sm:mt-0 text-xs text-slate-600">
+                                                <input type="checkbox" className="w-4 h-4 accent-cyan-600 rounded"
+                                                    checked={lat.useForCheck}
+                                                    onChange={(e) => setLat(prev => Object.assign({}, prev, { useForCheck: e.target.checked }))} />
+                                                <span>ใช้ค่าที่คำนวณได้แทนช่อง "แรงเฉือน" ด้านบน</span>
+                                            </label>
+                                        )}
+                                    </div>
+
+                                    {lat.enabled && (
+                                        <div className="space-y-4">
+                                            <div className="bg-slate-50 print:bg-transparent p-3 rounded-lg border border-slate-100 print:border-none">
+                                                <div className="text-[11px] font-bold text-slate-600 mb-2">ดินที่รับแรงด้านข้าง (เฉพาะช่วง {lateral.charLen.toFixed(1)} ม. บนสุด)</div>
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3">
+                                                    <LatField label="ชนิดดิน" value={lat.soilType} onChange={handleLat('soilType')}
+                                                        opts={[['clay', 'ดินเหนียว'], ['sand', 'ดินทราย']]} />
+                                                    {lat.soilType === 'clay' ? (
+                                                        <LatField label={<span>c<Sub text="u"/> แรงเฉือนไม่ระบายน้ำ</span>} value={lat.cu} onChange={handleLat('cu')} unit="ต./ม.²" />
+                                                    ) : (
+                                                        <LatField label="ความแน่น" value={lat.sandDensity} onChange={handleLat('sandDensity')}
+                                                            opts={[['loose', 'หลวม'], ['medium', 'ปานกลาง'], ['dense', 'แน่น']]} />
+                                                    )}
+                                                    {lat.soilType === 'sand' && (
+                                                        <LatField label={<span>&phi; ของทราย</span>} value={lat.phiLat} onChange={handleLat('phiLat')} unit="°" />
+                                                    )}
+                                                    <LatField label="การยึดหัวเข็ม" value={lat.fixity} onChange={handleLat('fixity')}
+                                                        opts={[['fixed', 'ยึดแน่นกับฐานราก'], ['free', 'หมุนได้ (ฝังตื้น)']]} />
+                                                    <LatField label="เกณฑ์ระยะโก่งหัวเข็ม" value={lat.yLimit} onChange={handleLat('yLimit')} unit="มม." />
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-slate-50 print:bg-transparent p-3 rounded-lg border border-slate-100 print:border-none">
+                                                <div className="text-[11px] font-bold text-slate-600 mb-2">หน้าตัดและความปลอดภัย</div>
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3">
+                                                    <LatField label="รูปทรงหน้าตัด" value={lat.shape} onChange={handleLat('shape')}
+                                                        opts={[['square', 'สี่เหลี่ยมตัน'], ['circle', 'กลม / กลวง']]} />
+                                                    <LatField label="ขนาด D" value={lat.D} onChange={handleLat('D')} unit="ม." />
+                                                    {lat.shape === 'circle' && <LatField label="รูใน d (0 = ตัน)" value={lat.di} onChange={handleLat('di')} unit="ม." />}
+                                                    <LatField label="ความยาวเข็ม L" value={lat.Lpile} onChange={handleLat('Lpile')} unit="ม." />
+                                                    <LatField label={<span>f&apos;<Sub text="c"/> ของเข็ม</span>} value={lat.fcPile} onChange={handleLat('fcPile')} unit="ksc" />
+                                                    <LatField label={<span>f<Sub text="pe"/> แรงอัดคงค้าง</span>} value={lat.fpe} onChange={handleLat('fpe')} unit="ksc" />
+                                                    <LatField label="ตัวคูณ EI แตกร้าว" value={lat.eiFactor} onChange={handleLat('eiFactor')} />
+                                                    <LatField label={<span>M<Sub text="u"/> เป็นกี่เท่า M<Sub text="cr"/></span>} value={lat.muFactor} onChange={handleLat('muFactor')} />
+                                                    <LatField label="F.S. ต่อ Broms" value={lat.fsBroms} onChange={handleLat('fsBroms')} />
+                                                    <LatField label="p-multiplier (ผลกลุ่ม)" value={lat.pMult} onChange={handleLat('pMult')} />
+                                                </div>
+                                            </div>
+
+                                            <div className={`p-3 rounded-lg border-2 ${lateral.gov.key === 'defl' ? 'bg-cyan-50 border-cyan-300' : lateral.gov.key === 'crack' ? 'bg-amber-50 border-amber-300' : 'bg-emerald-50 border-emerald-300'} print:bg-transparent`}>
+                                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                    <div className="text-sm">
+                                                        <span className="text-slate-600">กำลังรับแรงด้านข้างที่ใช้ได้ต่อเข็ม 1 ต้น:</span>{' '}
+                                                        <strong className="text-lg text-slate-800">{lateral.H_allow_kg.toFixed(0)} กก.</strong>
+                                                        <span className="text-slate-500 text-xs"> ({(lateral.H_allow_kg / 1000).toFixed(2)} ตัน)</span>
+                                                    </div>
+                                                    <div className="text-xs text-slate-600">คุมโดย: <strong>{lateral.gov.label}</strong></div>
+                                                </div>
+                                                {!lateral.longOK && (
+                                                    <div className="mt-2 text-[11px] bg-rose-50 border border-rose-200 text-rose-700 rounded p-2">
+                                                        <strong>คำเตือน:</strong> เข็มไม่เข้าเกณฑ์ "เข็มยาว" ({lateral.longCrit}) สมการ Broms ที่ใช้เป็นของเข็มยาว
+                                                        เข็มสั้นจะวิบัติแบบหมุนทั้งต้นและรับได้น้อยกว่านี้ ต้องใช้สมการเข็มสั้นแทน
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -2106,6 +2337,100 @@
                                 &middot; วิเคราะห์เฉพาะแกน X (2 มิติ)
                             </div>
                         </StepBox>
+
+                        {lat.enabled && (
+                            <StepBox title="3. กำลังรับแรงด้านข้างของเสาเข็ม (Broms + เกณฑ์ระยะโก่ง)">
+                                <div className="text-xs bg-cyan-50 print:bg-transparent border border-cyan-200 text-cyan-900 rounded p-2 mb-4 leading-snug">
+                                    แรงด้านข้างเกือบทั้งหมดถ่ายลงดินในช่วง <strong>{lateral.charLen.toFixed(1)} ม. บนสุด</strong> ({lat.soilType === 'clay' ? '1/β' : 'T'} = ระยะยาวลักษณะ)
+                                    ความยาวเข็มที่เกินจากนี้แทบไม่ช่วยเพิ่มกำลังด้านข้าง จึงต้องใช้ค่าดินของชั้นบนสุด ไม่ใช่ค่าเฉลี่ยตลอดความลึก
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3 mb-4 text-xs">
+                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
+                                        <div className="text-slate-500">EI (แตกร้าว)</div>
+                                        <div className="font-bold text-slate-700">{lateral.EI.toFixed(0)} kN·m²</div>
+                                    </div>
+                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
+                                        <div className="text-slate-500">M<Sub text="cr"/> / M<Sub text="u"/></div>
+                                        <div className="font-bold text-slate-700">{lateral.Mcr_tm.toFixed(2)} / {lateral.My_tm.toFixed(2)} ต.·ม.</div>
+                                    </div>
+                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
+                                        <div className="text-slate-500">{lat.soilType === 'clay' ? 'k = 67c_u' : 'n_h'}</div>
+                                        <div className="font-bold text-slate-700">{lat.soilType === 'clay' ? lateral.k.toFixed(0) + ' kN/m²' : 'T = ' + lateral.T.toFixed(2) + ' ม.'}</div>
+                                    </div>
+                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
+                                        <div className="text-slate-500">ระยะยาวลักษณะ</div>
+                                        <div className="font-bold text-slate-700">{lateral.charLen.toFixed(2)} ม.</div>
+                                    </div>
+                                </div>
+
+                                <table className="w-full text-left border-collapse text-sm print:text-xs mb-4">
+                                    <thead>
+                                        <tr className="border-b border-slate-300 text-slate-600">
+                                            <th className="py-2">กลไกที่ตรวจ</th>
+                                            <th>สมการ</th>
+                                            <th>H (กก.)</th>
+                                            <th>H (ตัน)</th>
+                                            <th>สถานะ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {lateral.modes.map(m => (
+                                            <tr key={m.key} className={`border-b border-slate-100 ${m === lateral.gov ? 'bg-amber-50 font-bold' : ''}`}>
+                                                <td className="py-2">{m.label}</td>
+                                                <td className="text-[11px] text-slate-500 font-mono">
+                                                    {m.key === 'defl' && (lat.soilType === 'clay'
+                                                        ? (lateral.isFixed ? 'y = Hβ/k' : 'y = 2Hβ/k')
+                                                        : (lateral.isFixed ? 'y = 0.93HT³/EI' : 'y = 2.43HT³/EI'))}
+                                                    {m.key === 'crack' && (lat.soilType === 'clay'
+                                                        ? (lateral.isFixed ? 'M = H/2β' : 'M = 0.322H/β')
+                                                        : (lateral.isFixed ? 'M = 0.93HT' : 'M = 0.77HT'))}
+                                                    {m.key === 'broms' && (lat.soilType === 'clay'
+                                                        ? `${lateral.nHinge}M_y = H(1.5D + 0.5f)`
+                                                        : `${lateral.nHinge}M_y = 0.67Hf`)}
+                                                </td>
+                                                <td>{lateral.toKg(m.H).toFixed(0)}</td>
+                                                <td>{(lateral.toKg(m.H) / 1000).toFixed(2)}</td>
+                                                <td>{m === lateral.gov ? <span className="text-amber-700">← คุมค่า</span> : ''}</td>
+                                            </tr>
+                                        ))}
+                                        <tr className="font-bold bg-slate-100">
+                                            <td className="py-2" colSpan="2">
+                                                ใช้ได้ต่อต้น {lateral.pMult < 1 && <span className="font-normal text-xs">(คูณ p-multiplier {lateral.pMult})</span>}
+                                            </td>
+                                            <td className="text-cyan-700">{lateral.H_allow_kg.toFixed(0)}</td>
+                                            <td className="text-cyan-700">{(lateral.H_allow_kg / 1000).toFixed(2)}</td>
+                                            <td></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+
+                                <div className={`p-3 rounded-lg border-2 ${calc.okPileShear ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'} print:bg-transparent`}>
+                                    <div className="text-sm">
+                                        <strong>เทียบกับแรงที่ต้องรับ:</strong> V<Sub text="shear"/> = {calc.V_shear_pile.toFixed(0)} กก./ต้น
+                                        {' '}เทียบกับกำลังที่ใช้ได้ {calc.shearCap.toFixed(0)} กก.
+                                        {' '}{calc.okPileShear
+                                            ? <span className="text-emerald-700 font-bold">ผ่านเกณฑ์</span>
+                                            : <span className="text-rose-700 font-bold">ไม่ผ่านเกณฑ์</span>}
+                                        {!lat.useForCheck && <span className="text-slate-500 text-xs"> (ใช้ค่าที่กรอกเอง ไม่ใช่ค่าจาก Broms)</span>}
+                                    </div>
+                                    {!calc.okPileShear && (
+                                        <div className="mt-2 text-xs text-rose-800 leading-snug">
+                                            ทางแก้ตามลำดับความคุ้มค่า: (1) ใช้ <strong>เข็มเอียง (raker)</strong> แปลงแรงราบเป็นแรงตามแกน
+                                            เอียง 1:4 ให้องค์ประกอบแนวราบราว {(0.242 * pile.allowComp).toFixed(0)} กก./ต้น หรือราว {(0.242 * pile.allowComp / Math.max(calc.V_shear_pile, 1)).toFixed(0)} เท่าของแรงด้านข้างที่ต้องรับ
+                                            &nbsp;(2) เพิ่มจำนวนเข็ม &nbsp;(3) ขยายหน้าตัดเข็ม &nbsp;(4) ปรับปรุงดินชั้นบนหน้า Toe
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-3 text-xs text-slate-500 leading-relaxed">
+                                    <strong>ข้อจำกัดของโมดูลนี้:</strong> สมมติดินชั้นเดียวสม่ำเสมอ ไม่ใช่ profile จริงจาก boring log
+                                    &middot; ใช้สมการเข็มยาว (long pile) &middot; ไม่คิดผลของแรงตามแกนต่อกำลังโมเมนต์ของหน้าตัด
+                                    (เข็มที่รับแรงถอนจะรับโมเมนต์ได้น้อยลงมาก) &middot; p-multiplier ต้องกรอกเอง
+                                    &middot; สำหรับงานที่ต้องเซ็นรับรอง ควรยืนยันด้วยการวิเคราะห์ p-y (LPILE / ALLPILE) หรือผลทดสอบแรงด้านข้างจริง
+                                </div>
+                            </StepBox>
+                        )}
                     </div>
                 );
             };
