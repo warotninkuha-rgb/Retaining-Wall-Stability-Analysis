@@ -112,7 +112,100 @@
     </script>
 
     <script type="text/babel">
-        const { useState, useMemo } = React;
+        const { useState, useMemo, useEffect } = React;
+
+        /* ═══════════════════════════════════════════════════════════════════
+           ระบบบันทึกพารามิเตอร์ล่าสุด
+           - ห่อ localStorage ด้วย try/catch ทุกจุด บางเบราว์เซอร์/โหมดส่วนตัว
+             จะ throw SecurityError ซึ่งจะทำให้ทั้งหน้าขาวถ้าไม่ดัก
+           - มี SCHEMA version กันข้อมูลเก่าที่โครงสร้างไม่ตรงทำให้โปรแกรมพัง
+           ═══════════════════════════════════════════════════════════════════ */
+        const STORE_KEY = 'rw-stability-params';
+        const SCHEMA = 1;
+
+        const store = (function () {
+            var ok = false;
+            try {
+                window.localStorage.setItem('__rwtest', '1');
+                window.localStorage.removeItem('__rwtest');
+                ok = true;
+            } catch (e) { ok = false; }
+            return {
+                available: ok,
+                read: function () {
+                    if (!ok) return null;
+                    try { return JSON.parse(window.localStorage.getItem(STORE_KEY)); }
+                    catch (e) { return null; }
+                },
+                write: function (o) {
+                    if (!ok) return false;
+                    try { window.localStorage.setItem(STORE_KEY, JSON.stringify(o)); return true; }
+                    catch (e) { return false; }
+                },
+                clear: function () {
+                    if (!ok) return;
+                    try { window.localStorage.removeItem(STORE_KEY); } catch (e) {}
+                }
+            };
+        })();
+
+        /* ค่าเริ่มต้นจากโรงงาน — ต้องตรงกับที่ประกาศไว้ใน useState เดิม */
+        const DEFAULTS = {
+            soil: { gamma_c: 1900, gamma_sat: 2100, phi_backfill: 30, phi_base: 35 },
+            base: { q_allow: 8000 },
+            surcharge: 500,
+            designLength: 1.0,
+            geom: { H: 2.0, C: 0.0, D: 0.6, G: 0.25, F: 2.0, T1: 0.3, waterDepth: 1.5 },
+            pressureMode: 'auto',
+            useUplift: true,
+            upliftMode: 'full',
+            fsOtReq: 1.5,
+            fsSlideReq: 1.5,
+            gamma_conc: 2400,
+            pile: { usePiles: true, designMode: 'full', spacingL: 2.0,
+                    allowComp: 35000, allowTen: 10500, allowShear: 2500 },
+            pileRows: [0.4, 2.1],
+            pileType: 'sq26',
+            lat: { enabled: true, useForCheck: true, soilType: 'clay', cu: 2.5,
+                   sandDensity: 'medium', phiLat: 30, fixity: 'fixed', yLimit: 6,
+                   fsBroms: 2.5, pMult: 1.0, D: 0.26, di: 0, shape: 'square',
+                   Lpile: 20, fcPile: 350, fpe: 50, eiFactor: 0.5, muFactor: 1.6 }
+        };
+
+        /* อ่านค่าที่บันทึกไว้ ตรวจความถูกต้องทีละ field
+           field ที่หายหรือชนิดผิด จะถอยไปใช้ค่าเริ่มต้นเสมอ ไม่ทำให้โปรแกรมพัง */
+        const SAVED = (function () {
+            var raw = store.read();
+            if (!raw || raw.v !== SCHEMA || !raw.d || typeof raw.d !== 'object') return null;
+            return raw;
+        })();
+
+        const pick = function (key) {
+            var def = DEFAULTS[key];
+            if (!SAVED) return def;
+            var v = SAVED.d[key];
+            if (v === undefined || v === null) return def;
+            if (Array.isArray(def)) {
+                if (!Array.isArray(v)) return def;
+                var arr = v.filter(function (x) { return typeof x === 'number' && isFinite(x); });
+                return arr.length ? arr : def;
+            }
+            if (typeof def === 'object') {
+                if (typeof v !== 'object' || Array.isArray(v)) return def;
+                return Object.assign({}, def, v);   // เติม field ใหม่ที่เพิ่มมาทีหลัง
+            }
+            if (typeof def === 'number') return (typeof v === 'number' && isFinite(v)) ? v : def;
+            if (typeof def === 'boolean') return typeof v === 'boolean' ? v : def;
+            return typeof v === 'string' ? v : def;
+        };
+
+        const fmtTime = function (ms) {
+            try {
+                var d = new Date(ms);
+                var p = function (n) { return (n < 10 ? '0' : '') + n; };
+                return p(d.getDate()) + '/' + p(d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+            } catch (e) { return '-'; }
+        };
 
         /* ⚠ ข้อจำกัดสำคัญ: หน้านี้แปล JSX ด้วย babel-standalone@6 ในเบราว์เซอร์
            ห้ามใช้ไวยากรณ์เหล่านี้ มิฉะนั้นจะได้หน้าขาวทันที (Unexpected token):
@@ -136,8 +229,11 @@
            v2.2 — แก้บั๊ก: ป้ายตรวจแรงเฉือนอ่าน pile.allowShear แต่เงื่อนไขใช้ shearCap
                   ทำให้ขึ้นข้อความขัดแย้งเช่น "<= 0 (ผ่าน)" ตอนนี้ทุกจุดอ้าง calc.shearCap
                   และกำลัง <= 0 ถือว่าไม่ผ่าน (เดิมเป็น 0 <= 0 = ผ่าน)
+           v2.3 — บันทึกพารามิเตอร์ล่าสุดลง localStorage อัตโนมัติ + ส่งออก/นำเข้าไฟล์ JSON
+                  + ปุ่มกลับไปใช้ค่าเริ่มต้น ทุกจุดที่อ่านค่าเก่ามีการตรวจชนิดข้อมูลทีละ field
+                  ข้อมูลเสียหรือ schema ไม่ตรงจะถอยไปใช้ค่าเริ่มต้นแทนที่จะทำให้โปรแกรมพัง
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v2.2 (C1-C6 + Broms + แก้ป้ายแรงเฉือน)';
+        const APP_VERSION = 'v2.3 (C1-C6 + Broms + บันทึกพารามิเตอร์)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -181,39 +277,32 @@
             const [activeTab, setActiveTab] = useState('inputs');
 
             // Global Inputs State
-            const [soil, setSoil] = useState({ gamma_c: 1900, gamma_sat: 2100, phi_backfill: 30, phi_base: 35 });
-            const [base, setBase] = useState({ q_allow: 10000 });
-            const [surcharge, setSurcharge] = useState(500);
-            const [designLength, setDesignLength] = useState(1.0);
+            const [soil, setSoil] = useState(pick('soil'));
+            const [base, setBase] = useState(pick('base'));
+            const [surcharge, setSurcharge] = useState(pick('surcharge'));
+            const [designLength, setDesignLength] = useState(pick('designLength'));
 
             // [C4] สัมประสิทธิ์แรงดันดิน: 'auto' | 'ka' (Active) | 'k0' (At-rest)
-            const [pressureMode, setPressureMode] = useState('auto');
+            const [pressureMode, setPressureMode] = useState(pick('pressureMode'));
             // [C1] แรงดันน้ำยกใต้ฐานราก
-            const [useUplift, setUseUplift]   = useState(true);
-            const [upliftMode, setUpliftMode] = useState('full');   // 'full' = ไม่ระบายน้ำ | 'seepage' = ระบายที่ Toe
+            const [useUplift, setUseUplift]   = useState(pick('useUplift'));
+            const [upliftMode, setUpliftMode] = useState(pick('upliftMode'));   // 'full' = ไม่ระบายน้ำ | 'seepage' = ระบายที่ Toe
             // เกณฑ์ F.S. ที่ผู้ใช้กำหนดเองได้
-            const [fsOtReq, setFsOtReq]       = useState(1.5);
-            const [fsSlideReq, setFsSlideReq] = useState(1.5);
+            const [fsOtReq, setFsOtReq]       = useState(pick('fsOtReq'));
+            const [fsSlideReq, setFsSlideReq] = useState(pick('fsSlideReq'));
             // หน่วยน้ำหนักคอนกรีต (เดิม hardcode 2400 อยู่ 4 จุด)
-            const [gamma_conc, setGammaConc]  = useState(2400);
+            const [gamma_conc, setGammaConc]  = useState(pick('gamma_conc'));
             
             // Geometry State
-            const [geom, setGeom] = useState({ H: 5.0, C: 0.0, D: 0.6, G: 0.20, F: 4.2, T1: 0.5, waterDepth: 0.0 });
+            const [geom, setGeom] = useState(pick('geom'));
             // มีน้ำอยู่เหนือระดับก้นฐานรากหรือไม่ (ใช้เลือกค่า n_h แบบจมน้ำของดินทราย)
             const calcWaterAtBase = geom.waterDepth < (geom.H + geom.T1);
 
             // Pile Foundation State
-            const [pile, setPile] = useState({
-                usePiles: true,
-                designMode: 'excess',
-                spacingL: 2.0,       
-                allowComp: 17000,    
-                allowTen: 10500,     
-                allowShear: 2500     
-            });
-            const [pileRows, setPileRows] = useState([0.6, 1.8, 3.0, 4.2]); 
+            const [pile, setPile] = useState(pick('pile'));
+            const [pileRows, setPileRows] = useState(pick('pileRows'));
 
-            const [pileType, setPileType] = useState('custom');
+            const [pileType, setPileType] = useState(pick('pileType'));
             const pileProfiles = {
                 'sq22':   { name: 'สี่เหลี่ยมตัน 0.22x0.22 ม.', comp: 25000, ten: 7500,  shear: 1500, D: 0.22, di: 0, shape: 'square' },
                 'sq26':   { name: 'สี่เหลี่ยมตัน 0.26x0.26 ม.', comp: 35000, ten: 10500, shear: 2500, D: 0.26, di: 0, shape: 'square' },
@@ -224,24 +313,95 @@
             };
 
             /* ═══ พารามิเตอร์วิเคราะห์แรงด้านข้าง (Broms + เกณฑ์ระยะโก่ง) ═══ */
-            const [lat, setLat] = useState({
-                enabled: true,
-                useForCheck: true,      // ให้ค่าที่คำนวณได้คุม allowShear
-                soilType: 'clay',       // 'clay' | 'sand'
-                cu: 2.5,                // ตัน/ม.² กำลังรับแรงเฉือนแบบไม่ระบายน้ำ
-                sandDensity: 'medium',  // 'loose' | 'medium' | 'dense'
-                phiLat: 30,             // องศา สำหรับดินทราย
-                fixity: 'fixed',        // 'fixed' = หัวยึดแน่นกับฐานราก | 'free' = หัวหมุนได้
-                yLimit: 6,              // มม. เกณฑ์ระยะโก่งหัวเข็ม
-                fsBroms: 2.5,           // ส่วนความปลอดภัยต่อกำลังประลัยของดิน
-                pMult: 1.0,             // ตัวคูณลดผลกลุ่มเสาเข็ม (p-multiplier)
-                D: 0.26, di: 0, shape: 'square',
-                Lpile: 20,              // ม. ความยาวเสาเข็ม
-                fcPile: 350,            // ksc
-                fpe: 50,                // ksc แรงอัดคงค้างจากลวดอัดแรง
-                eiFactor: 0.5,          // ตัวคูณ EI หน้าตัดแตกร้าว
-                muFactor: 1.6           // M_u ประมาณเป็นกี่เท่าของ M_cr
+            const [lat, setLat] = useState(pick('lat'));
+
+            /* ═══ บันทึก / โหลด / ส่งออก พารามิเตอร์ ═══ */
+            const [autoSave, setAutoSave] = useState(true);
+            const [savedAt, setSavedAt]   = useState(SAVED ? SAVED.t : 0);
+            const [storeMsg, setStoreMsg] = useState('');
+            const [showRestored, setShowRestored] = useState(!!SAVED);
+
+            const snapshot = () => ({
+                soil: soil, base: base, surcharge: surcharge, designLength: designLength,
+                geom: geom, pressureMode: pressureMode, useUplift: useUplift, upliftMode: upliftMode,
+                fsOtReq: fsOtReq, fsSlideReq: fsSlideReq, gamma_conc: gamma_conc,
+                pile: pile, pileRows: pileRows, pileType: pileType, lat: lat
             });
+
+            const applyData = (d) => {
+                const g = (k) => {
+                    const def = DEFAULTS[k], v = d ? d[k] : undefined;
+                    if (v === undefined || v === null) return def;
+                    if (Array.isArray(def)) return Array.isArray(v)
+                        ? v.filter(x => typeof x === 'number' && isFinite(x)) : def;
+                    if (typeof def === 'object') return (typeof v === 'object' && !Array.isArray(v))
+                        ? Object.assign({}, def, v) : def;
+                    if (typeof def === 'number') return (typeof v === 'number' && isFinite(v)) ? v : def;
+                    if (typeof def === 'boolean') return typeof v === 'boolean' ? v : def;
+                    return typeof v === 'string' ? v : def;
+                };
+                setSoil(g('soil')); setBase(g('base')); setSurcharge(g('surcharge'));
+                setDesignLength(g('designLength')); setGeom(g('geom'));
+                setPressureMode(g('pressureMode')); setUseUplift(g('useUplift')); setUpliftMode(g('upliftMode'));
+                setFsOtReq(g('fsOtReq')); setFsSlideReq(g('fsSlideReq')); setGammaConc(g('gamma_conc'));
+                setPile(g('pile')); setPileRows(g('pileRows')); setPileType(g('pileType')); setLat(g('lat'));
+            };
+
+            /* บันทึกอัตโนมัติแบบหน่วงเวลา กันไม่ให้เขียนทุกครั้งที่กดแป้น */
+            useEffect(() => {
+                if (!autoSave || !store.available) return;
+                const t = setTimeout(() => {
+                    const now = Date.now();
+                    if (store.write({ v: SCHEMA, t: now, d: snapshot() })) setSavedAt(now);
+                }, 700);
+                return () => clearTimeout(t);
+            }, [soil, base, surcharge, designLength, geom, pressureMode, useUplift, upliftMode,
+                fsOtReq, fsSlideReq, gamma_conc, pile, pileRows, pileType, lat, autoSave]);
+
+            const flash = (m) => { setStoreMsg(m); setTimeout(() => setStoreMsg(''), 3000); };
+
+            const exportJSON = () => {
+                try {
+                    const txt = JSON.stringify({ v: SCHEMA, t: Date.now(), app: APP_VERSION, d: snapshot() }, null, 2);
+                    const blob = new Blob([txt], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    const dt = new Date();
+                    a.href = url;
+                    a.download = 'retaining-wall-' + dt.getFullYear() + ('0' + (dt.getMonth() + 1)).slice(-2)
+                                 + ('0' + dt.getDate()).slice(-2) + '.json';
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 1000);
+                    flash('ส่งออกไฟล์แล้ว');
+                } catch (e) { flash('ส่งออกไม่สำเร็จ: ' + e.message); }
+            };
+
+            const importJSON = (ev) => {
+                const f = ev.target.files && ev.target.files[0];
+                ev.target.value = '';
+                if (!f) return;
+                const rd = new FileReader();
+                rd.onload = () => {
+                    try {
+                        const o = JSON.parse(rd.result);
+                        const d = (o && o.d && typeof o.d === 'object') ? o.d : o;
+                        if (!d || typeof d !== 'object') throw new Error('โครงสร้างไฟล์ไม่ถูกต้อง');
+                        applyData(d);
+                        setShowRestored(false);
+                        flash('นำเข้าพารามิเตอร์จาก ' + f.name + ' แล้ว');
+                    } catch (e) { flash('อ่านไฟล์ไม่สำเร็จ: ' + e.message); }
+                };
+                rd.onerror = () => flash('อ่านไฟล์ไม่สำเร็จ');
+                rd.readAsText(f);
+            };
+
+            const resetAll = () => {
+                if (!window.confirm('ล้างค่าที่บันทึกไว้ แล้วกลับไปใช้ค่าเริ่มต้นทั้งหมด?\n(ควรกด "ส่งออก" เก็บไว้ก่อนถ้ายังต้องใช้)')) return;
+                store.clear();
+                applyData(DEFAULTS);
+                setSavedAt(0); setShowRestored(false);
+                flash('กลับไปใช้ค่าเริ่มต้นแล้ว');
+            };
 
             // Layer Visibility State 
             const [showP1, setShowP1] = useState(true);
@@ -674,10 +834,50 @@
                         <svg className="w-5 h-5 text-sky-400" fill="currentColor" viewBox="0 0 20 20"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM11 13a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
                         <span className="font-semibold text-white tracking-wide">STRUCTURAL APPS</span>
                     </div>
-                    <button onClick={() => window.print()} className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-1.5 px-3 rounded flex items-center transition shadow-sm">
-                        <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
-                        พิมพ์รายงาน (A4)
-                    </button>
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+
+                        {/* สถานะการบันทึก */}
+                        {store.available ? (
+                            <label className="flex items-center gap-1.5 cursor-pointer bg-slate-800 hover:bg-slate-700 rounded px-2 py-1.5 transition"
+                                   title="บันทึกพารามิเตอร์ล่าสุดไว้ในเครื่องนี้ เปิดหน้าใหม่จะได้ค่าเดิม">
+                                <input type="checkbox" className="w-3.5 h-3.5 accent-emerald-500 rounded"
+                                       checked={autoSave} onChange={(e) => setAutoSave(e.target.checked)} />
+                                <span className="text-[11px] sm:text-xs whitespace-nowrap">
+                                    {autoSave
+                                        ? <span className="text-emerald-400">บันทึกอัตโนมัติ{savedAt ? ' \u00B7 ' + fmtTime(savedAt) : ''}</span>
+                                        : <span className="text-slate-400">ปิดการบันทึก</span>}
+                                </span>
+                            </label>
+                        ) : (
+                            <span className="text-[11px] text-amber-400 px-2" title="เบราว์เซอร์ปิดการเก็บข้อมูล หรืออยู่ในโหมดส่วนตัว">
+                                บันทึกไม่ได้ในเบราว์เซอร์นี้
+                            </span>
+                        )}
+
+                        <button onClick={exportJSON} title="ส่งออกพารามิเตอร์เป็นไฟล์ .json เก็บไว้กับแฟ้มโครงการ"
+                            className="bg-slate-700 hover:bg-slate-600 text-slate-100 font-medium py-1.5 px-2.5 rounded flex items-center transition">
+                            <svg className="w-4 h-4 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            <span className="hidden sm:inline text-xs">ส่งออก</span>
+                        </button>
+
+                        <input id="rw-import-file" type="file" accept=".json,application/json" className="hidden" onChange={importJSON} />
+                        <label htmlFor="rw-import-file" title="นำเข้าพารามิเตอร์จากไฟล์ .json ที่เคยส่งออกไว้"
+                            className="bg-slate-700 hover:bg-slate-600 text-slate-100 font-medium py-1.5 px-2.5 rounded flex items-center transition cursor-pointer">
+                            <svg className="w-4 h-4 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                            <span className="hidden sm:inline text-xs">นำเข้า</span>
+                        </label>
+
+                        <button onClick={resetAll} title="ล้างค่าที่บันทึกไว้ กลับไปใช้ค่าเริ่มต้นทั้งหมด"
+                            className="bg-slate-700 hover:bg-rose-700 text-slate-100 font-medium py-1.5 px-2.5 rounded flex items-center transition">
+                            <svg className="w-4 h-4 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            <span className="hidden sm:inline text-xs">ค่าเริ่มต้น</span>
+                        </button>
+
+                        <button onClick={() => window.print()} className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-1.5 px-3 rounded flex items-center transition shadow-sm">
+                            <svg className="w-4 h-4 sm:mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                            <span className="hidden sm:inline">พิมพ์รายงาน (A4)</span>
+                        </button>
+                    </div>
                 </div>
             );
 
@@ -2548,6 +2748,32 @@
                     </div>
                     
                     <div className="p-4 md:p-6 print:p-0">
+                        {storeMsg && (
+                            <div className="mb-4 bg-slate-800 text-slate-100 text-sm rounded-lg px-4 py-2.5 shadow-lg no-print flex items-center">
+                                <svg className="w-4 h-4 mr-2 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+                                {storeMsg}
+                            </div>
+                        )}
+
+                        {showRestored && (
+                            <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-900 text-sm rounded-lg px-4 py-3 no-print flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                <div className="flex items-start">
+                                    <svg className="w-5 h-5 mr-2 text-emerald-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>
+                                    <span>โหลดพารามิเตอร์ที่บันทึกไว้ล่าสุด{savedAt ? ' (' + fmtTime(savedAt) + ')' : ''} มาใช้แล้ว</span>
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    <button onClick={resetAll}
+                                        className="text-xs bg-white hover:bg-slate-50 border border-emerald-300 text-emerald-800 px-3 py-1.5 rounded transition">
+                                        ใช้ค่าเริ่มต้นแทน
+                                    </button>
+                                    <button onClick={() => setShowRestored(false)}
+                                        className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded transition">
+                                        รับทราบ
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         <header className="mb-6 print:mb-8 print:text-center no-print">
                             <h1 className="text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">Retaining Wall Stability Analysis</h1>
                             <p className="text-slate-500 text-sm mt-1">โปรแกรมวิเคราะห์เสถียรภาพและแรงดันดินใต้ฐานรากกำแพงกันดิน (พร้อมระบบเสาเข็ม)</p>
