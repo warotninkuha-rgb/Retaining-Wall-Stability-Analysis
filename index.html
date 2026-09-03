@@ -199,6 +199,92 @@
             return typeof v === 'string' ? v : def;
         };
 
+        /* ═══════════════════════════════════════════════════════════════════
+           ส่งออกรายงานเป็นไฟล์ Word (.doc)
+           ใช้วิธี HTML-in-Word ซึ่ง Word เปิดและแก้ไขต่อได้ ไม่ต้องพึ่ง library ภายนอก
+           สามเรื่องที่ต้องแปลงก่อน มิฉะนั้นไฟล์จะออกมาว่างเปล่า:
+             1) SVG  -> PNG      Word นำเข้า SVG ในไฟล์ HTML ไม่ได้
+             2) class ของ Tailwind -> inline style   เพราะ CSS จาก CDN ไม่ได้ไปด้วย
+             3) input/select -> ข้อความ   ไม่งั้นจะกลายเป็นช่องกรอกเปล่าใน Word
+           ═══════════════════════════════════════════════════════════════════ */
+        const WORD_COLORS = {
+            emerald: ['#047857', '#d1fae5'], rose: ['#be123c', '#ffe4e6'],
+            amber:   ['#b45309', '#fef3c7'], sky:  ['#0369a1', '#e0f2fe'],
+            cyan:    ['#0e7490', '#cffafe'], indigo: ['#4338ca', '#eef2ff'],
+            blue:    ['#1d4ed8', '#dbeafe'], slate: ['#334155', '#f1f5f9'],
+            purple:  ['#7e22ce', '#f3e8ff'], violet: ['#6d28d9', '#ede9fe'],
+            orange:  ['#c2410c', '#ffedd5'], red:  ['#b91c1c', '#fee2e2'],
+            green:   ['#15803d', '#dcfce7'], teal: ['#0f766e', '#ccfbf1']
+        };
+        const WORD_SIZES = { 'text-4xl': '22pt', 'text-3xl': '19pt', 'text-2xl': '16pt',
+                             'text-xl': '14pt', 'text-lg': '13pt', 'text-base': '11pt',
+                             'text-sm': '10pt', 'text-xs': '9pt' };
+
+        const WORD_CSS =
+            '@page WordSection1 { size:21.0cm 29.7cm; margin:1.4cm 1.4cm 1.6cm 1.4cm; }' +
+            'div.WordSection1 { page:WordSection1; }' +
+            "body,div,span,td,th,li,p,h1,h2,h3,h4 { font-family:'TH Sarabun New','Sarabun','Leelawadee UI','Tahoma',sans-serif; }" +
+            'body { font-size:11pt; color:#1e293b; line-height:1.3; }' +
+            'h1 { font-size:18pt; margin:0 0 4pt; } h2 { font-size:14pt; margin:0 0 4pt; }' +
+            'h3 { font-size:13pt; margin:10pt 0 4pt; } h4 { font-size:12pt; margin:8pt 0 3pt; }' +
+            'table { border-collapse:collapse; width:100%; margin:5pt 0; font-size:10pt; }' +
+            'th,td { border:0.5pt solid #94a3b8; padding:3pt 5pt; vertical-align:top; }' +
+            'th { background:#e2e8f0; font-weight:bold; }' +
+            'img { max-width:17cm; height:auto; }' +
+            'ul { margin:3pt 0; padding-left:16pt; } li { margin:1pt 0; }' +
+            'sub { font-size:8pt; } hr { border:none; border-top:0.5pt solid #cbd5e1; }';
+
+        /* แปลง SVG หนึ่งตัวเป็นรูป PNG (คืน null ถ้าทำไม่ได้ จะได้ข้ามไปโดยไม่พังทั้งไฟล์) */
+        const svgToPng = function (svg, w, h) {
+            return new Promise(function (resolve) {
+                try {
+                    var c2 = svg.cloneNode(true);
+                    c2.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                    c2.setAttribute('width', w);
+                    c2.setAttribute('height', h);
+                    c2.setAttribute('font-family', "'Sarabun','Leelawadee UI','Tahoma',sans-serif");
+                    var xml = new XMLSerializer().serializeToString(c2);
+                    var img = new Image();
+                    img.onload = function () {
+                        try {
+                            var cv = document.createElement('canvas');
+                            cv.width = w * 2; cv.height = h * 2;
+                            var ctx = cv.getContext('2d');
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, cv.width, cv.height);
+                            ctx.drawImage(img, 0, 0, cv.width, cv.height);
+                            resolve(cv.toDataURL('image/png'));
+                        } catch (e) { resolve(null); }
+                    };
+                    img.onerror = function () { resolve(null); };
+                    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml);
+                } catch (e) { resolve(null); }
+            });
+        };
+
+        /* แปลง class ของ Tailwind ที่มีความหมายเป็น inline style แล้วทิ้ง class */
+        const wordStyle = function (root) {
+            var list = Array.prototype.slice.call(root.querySelectorAll('*'));
+            list.forEach(function (el) {
+                var c = el.getAttribute('class');
+                if (c === null) return;
+                var st = [];
+                var mT = c.match(/(?:^|\s)text-([a-z]+)-\d{3}/);
+                if (mT && WORD_COLORS[mT[1]]) st.push('color:' + WORD_COLORS[mT[1]][0]);
+                var mB = c.match(/(?:^|\s)bg-([a-z]+)-\d{2,3}/);
+                if (mB && WORD_COLORS[mB[1]]) st.push('background:' + WORD_COLORS[mB[1]][1]);
+                for (var k in WORD_SIZES) {
+                    if (new RegExp('(?:^|\\s)' + k + '(?:\\s|$)').test(c)) { st.push('font-size:' + WORD_SIZES[k]); break; }
+                }
+                if (/font-bold|font-semibold/.test(c)) st.push('font-weight:bold');
+                if (/(?:^|\s)text-center(?:\s|$)/.test(c)) st.push('text-align:center');
+                if (/(?:^|\s)text-right(?:\s|$)/.test(c)) st.push('text-align:right');
+                if (/(?:^|\s)border(?:\s|$)|border-[0-9]/.test(c)) st.push('border:0.5pt solid #cbd5e1;padding:3pt');
+                if (st.length) el.setAttribute('style', (el.getAttribute('style') || '') + ';' + st.join(';'));
+                el.removeAttribute('class');
+            });
+        };
+
         const fmtTime = function (ms) {
             try {
                 var d = new Date(ms);
@@ -232,8 +318,12 @@
            v2.3 — บันทึกพารามิเตอร์ล่าสุดลง localStorage อัตโนมัติ + ส่งออก/นำเข้าไฟล์ JSON
                   + ปุ่มกลับไปใช้ค่าเริ่มต้น ทุกจุดที่อ่านค่าเก่ามีการตรวจชนิดข้อมูลทีละ field
                   ข้อมูลเสียหรือ schema ไม่ตรงจะถอยไปใช้ค่าเริ่มต้นแทนที่จะทำให้โปรแกรมพัง
+           v2.4 — หน้าสรุปสลับไปแสดงผลของเสาเข็มเป็นหลักเมื่อเปิดใช้ระบบฐานรากเสาเข็ม
+                  โดยผลของดินเดิมถูกลดระดับเป็นข้อมูลอ้างอิง (โหมด Full Load)
+                + ปุ่มส่งออกรายงานเป็นไฟล์ Word (.doc) แปลง SVG เป็น PNG และแปลง
+                  class ของ Tailwind เป็น inline style เพื่อให้ Word แสดงผลได้
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v2.3 (C1-C6 + Broms + บันทึกพารามิเตอร์)';
+        const APP_VERSION = 'v2.4 (C1-C6 + Broms + บันทึกค่า + ส่งออก Word)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -393,6 +483,99 @@
                 };
                 rd.onerror = () => flash('อ่านไฟล์ไม่สำเร็จ');
                 rd.readAsText(f);
+            };
+
+            const [busyWord, setBusyWord] = useState(false);
+
+            const exportWord = () => {
+                var src = document.getElementById('report-root');
+                if (!src) { flash('ไม่พบเนื้อหารายงาน'); return; }
+                setBusyWord(true);
+                try {
+                    var clone = src.cloneNode(true);
+
+                    /* cloneNode ไม่คัดลอกค่าที่ React ตั้งไว้ในระดับ property จึงต้องคัดมาเอง */
+                    var si = src.querySelectorAll('input'), ci = clone.querySelectorAll('input');
+                    for (var i = 0; i < si.length && i < ci.length; i++) {
+                        ci[i].setAttribute('data-val', si[i].value);
+                        ci[i].setAttribute('data-chk', si[i].checked ? '1' : '0');
+                    }
+                    var ss = src.querySelectorAll('select'), cs = clone.querySelectorAll('select');
+                    for (var j = 0; j < ss.length && j < cs.length; j++) {
+                        var op = ss[j].options[ss[j].selectedIndex];
+                        cs[j].setAttribute('data-val', op ? op.text : '');
+                    }
+
+                    /* ตัดสิ่งที่ไม่ต้องอยู่ในรายงานออก */
+                    Array.prototype.slice.call(clone.querySelectorAll('*')).forEach(function (el) {
+                        if (!el.parentNode) return;
+                        var c = el.getAttribute('class') || '';
+                        if (/(^|\s)no-print(\s|$)/.test(c) || c.indexOf('print:hidden') !== -1) el.parentNode.removeChild(el);
+                    });
+                    Array.prototype.slice.call(clone.querySelectorAll('button')).forEach(function (el) {
+                        if (el.parentNode) el.parentNode.removeChild(el);
+                    });
+
+                    /* ช่องกรอกกลายเป็นข้อความ */
+                    Array.prototype.slice.call(clone.querySelectorAll('input,select,textarea')).forEach(function (el) {
+                        if (!el.parentNode) return;
+                        var t = el.tagName.toLowerCase(), txt;
+                        if (t === 'select') txt = el.getAttribute('data-val') || '';
+                        else if (el.type === 'checkbox' || el.type === 'radio') txt = el.getAttribute('data-chk') === '1' ? '\u2611' : '\u2610';
+                        else txt = el.getAttribute('data-val') || '';
+                        var sp = document.createElement('span');
+                        sp.textContent = txt;
+                        sp.setAttribute('style', 'font-weight:bold;border-bottom:0.75pt solid #64748b;padding:0 4pt;');
+                        el.parentNode.replaceChild(sp, el);
+                    });
+
+                    /* SVG -> PNG  (ไอคอนเล็กกว่า 200px ตัดทิ้ง ไม่งั้นจะได้รูปจิ๋วเต็มไฟล์) */
+                    var jobs = Array.prototype.slice.call(clone.querySelectorAll('svg')).map(function (svg) {
+                        var vb = (svg.getAttribute('viewBox') || '').split(/[\s,]+/).map(Number);
+                        var w = vb[2] || 0, h = vb[3] || 0;
+                        if (!(w >= 200) || !(h > 0)) {
+                            if (svg.parentNode) svg.parentNode.removeChild(svg);
+                            return Promise.resolve();
+                        }
+                        return svgToPng(svg, w, h).then(function (png) {
+                            if (!svg.parentNode) return;
+                            if (!png) { svg.parentNode.removeChild(svg); return; }
+                            var im = document.createElement('img');
+                            im.setAttribute('src', png);
+                            im.setAttribute('style', 'width:' + Math.min(16.5, w / 40).toFixed(1) + 'cm;height:auto;');
+                            svg.parentNode.replaceChild(im, svg);
+                        });
+                    });
+
+                    Promise.all(jobs).then(function () {
+                        wordStyle(clone);
+                        var head = '<html xmlns:o="urn:schemas-microsoft-com:office:office"'
+                            + ' xmlns:w="urn:schemas-microsoft-com:office:word"'
+                            + ' xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8">'
+                            + '<title>Retaining Wall Calculation Report</title>'
+                            + '<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View>'
+                            + '<w:Zoom>100</w:Zoom><w:DoNotOptimizeForBrowser/></w:WordDocument></xml><![endif]-->'
+                            + '<style>' + WORD_CSS + '</style></head><body>';
+                        var html = head + '<div class="WordSection1">' + clone.innerHTML + '</div></body></html>';
+                        var blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' });
+                        var url = URL.createObjectURL(blob);
+                        var a = document.createElement('a');
+                        var dt = new Date();
+                        a.href = url;
+                        a.download = 'retaining-wall-report-' + dt.getFullYear()
+                            + ('0' + (dt.getMonth() + 1)).slice(-2) + ('0' + dt.getDate()).slice(-2) + '.doc';
+                        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                        setTimeout(function () { try { URL.revokeObjectURL(url); } catch (e) {} }, 1500);
+                        setBusyWord(false);
+                        flash('สร้างไฟล์ Word แล้ว (' + Math.round(html.length / 1024) + ' KB)');
+                    })['catch'](function (e) {
+                        setBusyWord(false);
+                        flash('สร้างไฟล์ไม่สำเร็จ: ' + e.message);
+                    });
+                } catch (e) {
+                    setBusyWord(false);
+                    flash('สร้างไฟล์ไม่สำเร็จ: ' + e.message);
+                }
             };
 
             const resetAll = () => {
@@ -820,6 +1003,20 @@
                 </div>
             );
 
+            /* การ์ดตัวเลขสรุปในหน้า Dashboard */
+            const StatCard = ({ label, value, unit, cond, tTrue, tFalse, note, muted }) => (
+                <div className={`print:p-4 rounded-xl border shadow-sm flex flex-col items-center justify-center text-center ${muted ? 'bg-slate-50 border-slate-200 p-4' : 'bg-white border-slate-200 p-6'}`}>
+                    <span className={`font-medium mb-3 ${muted ? 'text-slate-400 text-xs' : 'text-slate-500 text-sm'}`}>{label}</span>
+                    <div className={`font-bold mb-3 ${muted ? 'text-2xl text-slate-600' : 'text-4xl text-slate-800 print:text-3xl mb-4'}`}>
+                        {value}{unit && <span className="text-sm text-slate-500 ml-1 font-normal">{unit}</span>}
+                    </div>
+                    {cond !== null && cond !== undefined
+                        ? <Badge condition={cond} textTrue={tTrue} textFalse={tFalse} />
+                        : <span className="text-xs text-slate-500 bg-slate-100 px-2 py-1 rounded">{tTrue}</span>}
+                    {note && <span className="text-[10px] text-slate-400 mt-2 leading-tight">{note}</span>}
+                </div>
+            );
+
             const addPileRow = () => setPileRows([...pileRows, parseFloat(((geom.C + geom.D + geom.F)/2).toFixed(2))]);
             const removePileRow = (index) => setPileRows(pileRows.filter((_, i) => i !== index));
             const updatePileRow = (index, value) => {
@@ -871,6 +1068,12 @@
                             className="bg-slate-700 hover:bg-rose-700 text-slate-100 font-medium py-1.5 px-2.5 rounded flex items-center transition">
                             <svg className="w-4 h-4 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                             <span className="hidden sm:inline text-xs">ค่าเริ่มต้น</span>
+                        </button>
+
+                        <button onClick={exportWord} disabled={busyWord} title="ดาวน์โหลดรายงานทั้งหมดเป็นไฟล์ Word แก้ไขต่อได้"
+                            className="bg-sky-700 hover:bg-sky-600 disabled:bg-slate-600 disabled:cursor-wait text-white font-medium py-1.5 px-2.5 rounded flex items-center transition shadow-sm">
+                            <svg className="w-4 h-4 sm:mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                            <span className="hidden sm:inline text-xs">{busyWord ? 'กำลังสร้าง...' : 'Word'}</span>
                         </button>
 
                         <button onClick={() => window.print()} className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-1.5 px-3 rounded flex items-center transition shadow-sm">
@@ -1362,6 +1565,41 @@
                 const p8 = `${x0},${y0 - svgT1}`; 
                 const wallPolygon = `${p1} ${p2} ${p3} ${p4} ${p5} ${p6} ${p7} ${p8}`;
 
+                /* ═══ สลับผลสรุปเป็นของเสาเข็มเมื่อเปิดใช้ระบบฐานรากเสาเข็ม ═══ */
+                const pileMode = pile.usePiles && calc.N_piles > 0 && calc.pile_results.length > 0;
+                const comps    = pileMode ? calc.pile_results.map(p => p.p_comp) : [0];
+                const maxComp  = Math.max.apply(null, comps.concat([0]));
+                const maxTen   = pileMode ? Math.abs(Math.min.apply(null, calc.pile_results.map(p => p.p_ten).concat([0]))) : 0;
+                const worstCompRow = pileMode ? (calc.pile_results[comps.indexOf(maxComp)] || {}).id || '-' : '-';
+                const e_p      = (pileMode && calc.govPile) ? (calc.x_cg_pile - calc.govPile.X_bar) : 0;
+                const minComp  = Math.min.apply(null, comps);
+                const spreadNote = pileMode
+                    ? (maxComp > 0 && minComp > 0
+                        ? 'แรงต่างกันระหว่างแถว ' + (maxComp / minComp).toFixed(1) + ' เท่า'
+                        : 'มีแถวที่รับแรงถอน')
+                    : '';
+
+                const soilCards = (muted) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-6 print:gap-4">
+                        <StatCard muted={muted} label="Overturning (F.S.)" value={fmt(calc.FS_ot)}
+                            cond={calc.okOT}
+                            tTrue={`\u2265 ${fsOtReq.toFixed(2)} ผ่าน`} tFalse={`\u003C ${fsOtReq.toFixed(2)} ไม่ผ่าน`}
+                            note={'กรณีวิกฤต ' + calc.govOT.label} />
+                        <StatCard muted={muted} label="Sliding (F.S.)" value={fmt(calc.FS_slide)}
+                            cond={calc.okSlide}
+                            tTrue={`\u2265 ${fsSlideReq.toFixed(2)} ผ่าน`} tFalse={`\u003C ${fsSlideReq.toFixed(2)} ไม่ผ่าน`}
+                            note={'กรณีวิกฤต ' + calc.govSL.label} />
+                        <StatCard muted={muted} label="เยื้องศูนย์ |e| (ม.)" value={Math.abs(calc.e).toFixed(3)}
+                            cond={calc.okEcc}
+                            tTrue={`\u2264 B/6 (${calc.B6.toFixed(2)} ม.)`} tFalse={`\u003E B/6 (${calc.B6.toFixed(2)} ม.)`}
+                            note={calc.bearingMode === 'triangle' ? 'กระจายแบบสามเหลี่ยม' : calc.bearingMode === 'outside' ? 'แรงลัพธ์นอกฐาน' : 'กระจายเต็มหน้าฐาน'} />
+                        <StatCard muted={muted} label={<span>q<Sub text="max"/> (กก./ม.&sup2;)</span>} value={fmt(calc.q_max, 0)}
+                            cond={calc.okBear}
+                            tTrue={"\u2264 q_allow ผ่าน"} tFalse={"\u003E q_allow ไม่ผ่าน"}
+                            note={'กรณีวิกฤต ' + calc.govQ.label + ' \u00B7 ที่ ' + (calc.peakAt === 'toe' ? 'Toe' : 'Heel')} />
+                    </div>
+                );
+
                 /* [C2][C3] แผนภาพหน่วยแรงใต้ฐาน รองรับทั้งสี่เหลี่ยมคางหมูและสามเหลี่ยม */
                 const q_peak = Number.isFinite(calc.q_max) ? calc.q_max : 0;
                 const q_scale = 80 / Math.max(q_peak, 1);
@@ -1390,38 +1628,61 @@
                     <div className="space-y-6 animate-[fadeIn_0.3s_ease-in-out] print:break-inside-avoid print:mt-6 print:border-t print:border-slate-800 print:pt-4">
                         <h3 className="hidden print:block font-bold text-lg text-slate-800 mb-4 uppercase">สรุปผลและไดอะแกรม (Dashboard & Diagrams)</h3>
                         
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-6 print:gap-4">
-                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                                <span className="text-slate-500 text-sm mb-3 font-medium">Overturning (F.S.)</span>
-                                <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{fmt(calc.FS_ot)}</div>
-                                <Badge condition={calc.okOT} textTrue={`\u2265 ${fsOtReq.toFixed(2)} ผ่าน`} textFalse={`\u003C ${fsOtReq.toFixed(2)} ไม่ผ่าน`} />
-                                <span className="text-[10px] text-slate-400 mt-2">กรณีวิกฤต {calc.govOT.label}</span>
+                        {pileMode ? (
+                            <div className="space-y-6">
+                                {/* ═══ ผลหลัก: ระบบเสาเข็ม ═══ */}
+                                <div>
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-1">
+                                        <h4 className="text-sm font-bold text-indigo-800 uppercase tracking-wider flex items-center">
+                                            <span className="w-2 h-5 bg-indigo-600 rounded-sm mr-2"></span>
+                                            ผลตรวจสอบหลัก &mdash; ระบบฐานรากเสาเข็ม
+                                        </h4>
+                                        <span className="text-xs text-slate-500">
+                                            {pile.designMode === 'full' ? 'Full Load' : 'Excess'} &middot; {calc.N_piles} แถว &middot; ช่วง {pile.spacingL} ม.
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-6 print:gap-4">
+                                        <StatCard label="แรงกดสูงสุด / ต้น" value={maxComp.toFixed(0)} unit="กก."
+                                            cond={calc.okPileComp}
+                                            tTrue={`\u2264 ${pile.allowComp} ผ่าน`}
+                                            tFalse={`\u003E ${pile.allowComp} เกินพิกัด`}
+                                            note={`ใช้กำลัง ${pile.allowComp > 0 ? (100 * maxComp / pile.allowComp).toFixed(0) : '-'}% \u00B7 แถวที่ ${worstCompRow}`} />
+                                        <StatCard label="แรงถอนสูงสุด / ต้น" value={maxTen.toFixed(0)} unit="กก."
+                                            cond={calc.okPileTen}
+                                            tTrue={maxTen < 1 ? 'ไม่มีแรงถอน' : `\u2264 ${pile.allowTen} ผ่าน`}
+                                            tFalse={`\u003E ${pile.allowTen} เกินพิกัด`}
+                                            note={maxTen < 1 ? 'เข็มรับแรงกดทุกแถว' : 'ต้องออกแบบเหล็กเดือยที่หัวเข็ม'} />
+                                        <StatCard label="แรงเฉือน / ต้น" value={calc.V_shear_pile.toFixed(0)} unit="กก."
+                                            cond={calc.okPileShear}
+                                            tTrue={calc.shearCapValid ? `\u2264 ${calc.shearCap.toFixed(0)} ผ่าน` : 'ผ่าน'}
+                                            tFalse={calc.shearCapValid ? `เกิน ${calc.shearRatio.toFixed(1)} เท่า` : 'ยังไม่ได้กำหนดกำลัง'}
+                                            note={calc.shearFromBroms ? 'กำลังจาก Broms ' + calc.shearCap.toFixed(0) + ' กก.' : 'กำลังจากค่าที่กรอกเอง'} />
+                                        <StatCard label={<span>เยื้องศูนย์จาก CG เข็ม (e<Sub text="p"/>)</span>}
+                                            value={e_p >= 0 ? e_p.toFixed(3) : e_p.toFixed(3)} unit="ม."
+                                            cond={null}
+                                            tTrue={Math.abs(e_p) < 0.005 ? 'แรงลัพธ์ตรง CG' : (e_p > 0 ? 'เยื้องไปทาง Toe' : 'เยื้องไปทาง Heel')}
+                                            note={spreadNote} />
+                                    </div>
+                                </div>
+
+                                {/* ═══ ผลของดินเดิม: อ้างอิงหรือร่วมตรวจ แล้วแต่โหมด ═══ */}
+                                <div>
+                                    <h4 className={`text-sm font-bold uppercase tracking-wider mb-3 flex items-center ${pile.designMode === 'full' ? 'text-slate-500' : 'text-amber-700'}`}>
+                                        <span className={`w-2 h-5 rounded-sm mr-2 ${pile.designMode === 'full' ? 'bg-slate-400' : 'bg-amber-500'}`}></span>
+                                        {pile.designMode === 'full'
+                                            ? 'อ้างอิงเท่านั้น \u2014 กรณีสมมติว่าวางบนดินเดิม'
+                                            : 'ตรวจสอบร่วม \u2014 ส่วนที่ดินเดิมรับ'}
+                                    </h4>
+                                    {soilCards(pile.designMode === 'full')}
+                                    <div className={`mt-3 p-3 rounded-lg border text-xs leading-relaxed print:break-inside-avoid ${pile.designMode === 'full' ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
+                                        {pile.designMode === 'full'
+                                            ? <span>เมื่อเสาเข็มรับแรงทั้งหมด F.S. พลิกคว่ำ/ลื่นไถล และ q<Sub text="max"/> ข้างบน <strong>ไม่ใช่กลไกวิบัติที่ควบคุมการออกแบบ</strong> กำแพงบนเสาเข็มต้านการพลิกคว่ำด้วยคู่แรงกด-แรงถอนในเข็ม และต้านการลื่นไถลด้วยแรงด้านข้างของเข็ม ตัวเลขชุดนี้แสดงไว้เพื่อเปรียบเทียบเท่านั้น</span>
+                                            : <span><strong>โหมด Excess:</strong> สมมติว่าดินเดิมยังรับแรงร่วมกับเสาเข็ม ทั้งสองชุดจึงต้องผ่านพร้อมกัน โปรดอ่านคำเตือนในแท็บ "แรงเสาเข็ม" ว่าวิธีนี้ไม่ใช่วิธีออกแบบตามมาตรฐาน</span>}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                                <span className="text-slate-500 text-sm mb-3 font-medium">Sliding (F.S.)</span>
-                                <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{fmt(calc.FS_slide)}</div>
-                                <Badge condition={calc.okSlide} textTrue={`\u2265 ${fsSlideReq.toFixed(2)} ผ่าน`} textFalse={`\u003C ${fsSlideReq.toFixed(2)} ไม่ผ่าน`} />
-                                <span className="text-[10px] text-slate-400 mt-2">กรณีวิกฤต {calc.govSL.label}</span>
-                            </div>
-                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                                <span className="text-slate-500 text-sm mb-3 font-medium">เยื้องศูนย์ |e| (ม.)</span>
-                                <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{Math.abs(calc.e).toFixed(3)}</div>
-                                <Badge condition={calc.okEcc} textTrue={`\u2264 B/6 (${calc.B6.toFixed(2)} ม.)`} textFalse={`\u003E B/6 (${calc.B6.toFixed(2)} ม.)`} />
-                                <span className="text-[10px] text-slate-400 mt-2">
-                                    {calc.bearingMode === 'triangle' ? 'กระจายแบบสามเหลี่ยม' : calc.bearingMode === 'outside' ? 'แรงลัพธ์นอกฐาน' : 'กระจายเต็มหน้าฐาน'}
-                                </span>
-                            </div>
-                            <div className="bg-white p-6 print:p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center justify-center text-center">
-                                <span className="text-slate-500 text-sm mb-3 font-medium">q<Sub text="max"/> (กก./ม.&sup2;)</span>
-                                <div className="text-4xl font-bold text-slate-800 mb-4 print:text-3xl">{fmt(calc.q_max, 0)}</div>
-                                <Badge condition={calc.okBear} textTrue={"\u2264 q_allow ผ่าน"} textFalse={"\u003E q_allow ไม่ผ่าน"} />
-                                <span className="text-[10px] text-slate-400 mt-2">กรณีวิกฤต {calc.govQ.label} &middot; ที่ {calc.peakAt === 'toe' ? 'Toe' : 'Heel'}</span>
-                            </div>
-                        </div>
-                        {pile.usePiles && (
-                            <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 text-indigo-800 text-sm text-center font-medium shadow-sm print:break-inside-avoid">
-                                * มีการเปิดใช้งาน <strong>ระบบฐานรากเสาเข็ม</strong> โปรดตรวจสอบกำลังรับแรงของเสาเข็มในแท็บ "แรงเสาเข็ม (Piles)" เพื่อพิจารณาเสถียรภาพที่แท้จริง
-                            </div>
+                        ) : (
+                            soilCards(false)
                         )}
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 print:grid-cols-2 gap-6 print:gap-4 print:mt-4">
@@ -2742,7 +3003,7 @@
             );
 
             return (
-                <div className="max-w-6xl mx-auto pb-12 font-sans print:p-0 print:m-0 print:max-w-full">
+                <div id="report-root" className="max-w-6xl mx-auto pb-12 font-sans print:p-0 print:m-0 print:max-w-full">
                     <div className="no-print">
                         {GlobalNav()}
                     </div>
