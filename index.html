@@ -166,6 +166,15 @@
                     allowComp: 35000, allowTen: 10500, allowShear: 2500 },
             pileRows: [0.4, 2.1],
             pileType: 'sq26',
+            /* [PR] พารามิเตอร์โหมด Piled Raft — ป้อนเป็น "การทรุดตัว" ซึ่งวัดได้จริง
+               แล้วโปรแกรมแปลงเป็นความแข็ง (stiffness) ให้เอง */
+            raft: {
+                sSoil: 25,        // มม. การทรุดตัวของดินเมื่อรับ q_allow เต็ม
+                sPile: 6,         // มม. การทรุดตัวของเข็มที่แรงใช้งาน (จาก static load test)
+                sLimit: 25,       // มม. ขีดจำกัดการทรุดตัวที่ยอมรับได้
+                robust: 1.0,      // ตัวคูณกำลังที่ยอมให้ในกรณีดินไม่ช่วย
+                contactOK: false  // ยืนยันว่าฐานสัมผัสดินจริงตลอดอายุใช้งาน
+            },
             lat: { enabled: true, useForCheck: true, soilType: 'clay', cu: 2.5,
                    sandDensity: 'medium', phiLat: 30, fixity: 'fixed', yLimit: 6,
                    fsBroms: 2.5, pMult: 1.0, D: 0.26, di: 0, shape: 'square',
@@ -322,8 +331,13 @@
                   โดยผลของดินเดิมถูกลดระดับเป็นข้อมูลอ้างอิง (โหมด Full Load)
                 + ปุ่มส่งออกรายงานเป็นไฟล์ Word (.doc) แปลง SVG เป็น PNG และแปลง
                   class ของ Tailwind เป็น inline style เพื่อให้ Word แสดงผลได้
+           v3.0 — ยกเลิกโหมด Excess Forces เปลี่ยนเป็นโหมด Piled Raft ที่ถูกต้อง
+                  แบ่งแรงด้วยความแข็ง (displacement compatibility) แทนการลบกำลังกัน
+                  แก้ระบบสมการ 2x2 ของแผ่นแกร่งบนสปริง พร้อมวนซ้ำเงื่อนไขดินไม่รับแรงดึง
+                  รันคู่กับกรณี ks = 0 (ดินหลุดจากใต้ฐาน) เสมอ ต้องผ่านทั้งสองกรณี
+                  ตรวจสอบแล้วว่า solveRaft(ks=0) ให้ผลตรงกับสูตร elastic center เดิมทุกหลัก
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v2.4 (C1-C6 + Broms + บันทึกค่า + ส่งออก Word)';
+        const APP_VERSION = 'v3.0 (Piled Raft + Broms + บันทึกค่า + Word)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -389,7 +403,13 @@
             const calcWaterAtBase = geom.waterDepth < (geom.H + geom.T1);
 
             // Pile Foundation State
-            const [pile, setPile] = useState(pick('pile'));
+            const [pile, setPile] = useState(function () {
+                var p = pick('pile');
+                /* ข้อมูลเก่าที่บันทึกโหมด 'excess' ไว้ ให้ย้ายมาเป็น 'full' ซึ่งปลอดภัยกว่า */
+                if (p.designMode !== 'full' && p.designMode !== 'raft') p.designMode = 'full';
+                return p;
+            });
+            const [raft, setRaft] = useState(pick('raft'));
             const [pileRows, setPileRows] = useState(pick('pileRows'));
 
             const [pileType, setPileType] = useState(pick('pileType'));
@@ -415,7 +435,7 @@
                 soil: soil, base: base, surcharge: surcharge, designLength: designLength,
                 geom: geom, pressureMode: pressureMode, useUplift: useUplift, upliftMode: upliftMode,
                 fsOtReq: fsOtReq, fsSlideReq: fsSlideReq, gamma_conc: gamma_conc,
-                pile: pile, pileRows: pileRows, pileType: pileType, lat: lat
+                pile: pile, pileRows: pileRows, pileType: pileType, lat: lat, raft: raft
             });
 
             const applyData = (d) => {
@@ -434,7 +454,10 @@
                 setDesignLength(g('designLength')); setGeom(g('geom'));
                 setPressureMode(g('pressureMode')); setUseUplift(g('useUplift')); setUpliftMode(g('upliftMode'));
                 setFsOtReq(g('fsOtReq')); setFsSlideReq(g('fsSlideReq')); setGammaConc(g('gamma_conc'));
-                setPile(g('pile')); setPileRows(g('pileRows')); setPileType(g('pileType')); setLat(g('lat'));
+                var np = g('pile');
+                if (np.designMode !== 'full' && np.designMode !== 'raft') np.designMode = 'full';
+                setPile(np); setPileRows(g('pileRows')); setPileType(g('pileType'));
+                setLat(g('lat')); setRaft(g('raft'));
             };
 
             /* บันทึกอัตโนมัติแบบหน่วงเวลา กันไม่ให้เขียนทุกครั้งที่กดแป้น */
@@ -446,7 +469,7 @@
                 }, 700);
                 return () => clearTimeout(t);
             }, [soil, base, surcharge, designLength, geom, pressureMode, useUplift, upliftMode,
-                fsOtReq, fsSlideReq, gamma_conc, pile, pileRows, pileType, lat, autoSave]);
+                fsOtReq, fsSlideReq, gamma_conc, pile, pileRows, pileType, lat, raft, autoSave]);
 
             const flash = (m) => { setStoreMsg(m); setTimeout(() => setStoreMsg(''), 3000); };
 
@@ -862,56 +885,118 @@
                 let sum_d2 = 0;
                 pileRows.forEach(x => { const d = x_cg_pile - x; sum_d2 += (d * d); });
 
-                /* ย้อนสูตรหาแรงแนวดิ่งสูงสุดที่ดินเดิมรับได้ ที่ระยะเยื้องศูนย์เดิม */
-                const soilCapacityOf = (c) => {
-                    if (!(base.q_allow > 0) || !(B > 0) || !(L > 0) || !c.valid) return 0;
-                    return c.mode === 'triangle'
-                        ? (base.q_allow * 3 * Math.min(c.X_bar, B - c.X_bar) * L) / 2
-                        : (base.q_allow * B * L) / (1 + 6 * c.absE / B);
+                /* ═══ [PR] แบบจำลอง Piled Raft ═══════════════════════════════════
+                   เลิกแบ่งแรงด้วย "กำลัง" เปลี่ยนมาแบ่งด้วย "การเคลื่อนตัวที่ต้องเท่ากัน"
+                   ฐานรากถือเป็นแผ่นแกร่ง  w(x) = w0 + theta*x  เหลือตัวแปร 2 ตัว
+                     SumV = ks*Ly*Int(w dx) + Sum(Kp*w(xi))
+                     SumM = ks*Ly*Int(w*x dx) + Sum(Kp*w(xi)*xi)
+                   แก้ระบบ 2x2 แล้ววนซ้ำตัดช่วงที่ w < 0 ออก เพราะดินรับแรงดึงไม่ได้
+                   ใส่ ks = 0 จะได้ผลเท่าโหมด Full Load พอดี ใช้เป็นกรณีตรวจความทนทาน */
+                const ks_raft = (raft.sSoil > 0 && base.q_allow > 0)
+                    ? base.q_allow / (raft.sSoil / 1000) : 0;          /* กก./ม.³ */
+                const Kp_raft = (raft.sPile > 0 && pile.allowComp > 0)
+                    ? pile.allowComp / (raft.sPile / 1000) : 0;        /* กก./ม. ต่อเข็ม 1 ต้น */
+
+                const solveRaft = (Vg, Mg, ks, Kp) => {
+                    if (!(Vg > 0) || !(B > 0) || N_piles === 0 || !(Kp > 0)) return null;
+                    let SKp = 0, SKx = 0, SKx2 = 0;
+                    pileRows.forEach(x => { SKp += Kp; SKx += Kp * x; SKx2 += Kp * x * x; });
+                    let a = 0, b = (ks > 0 ? B : 0), w0 = 0, th = 0, conv = false;
+                    for (let it = 0; it < 40; it++) {
+                        const c0 = ks * pile.spacingL;
+                        const S0 = c0 * (b - a);
+                        const S1 = c0 * (b * b - a * a) / 2;
+                        const S2 = c0 * (b * b * b - a * a * a) / 3;
+                        const A11 = S0 + SKp, A12 = S1 + SKx, A22 = S2 + SKx2;
+                        const det = (A11 * A22) - (A12 * A12);
+                        if (!(Math.abs(det) > 1e-9)) return null;
+                        w0 = ((Vg * A22) - (A12 * Mg)) / det;
+                        th = ((A11 * Mg) - (A12 * Vg)) / det;
+                        if (!(ks > 0)) { conv = true; break; }
+                        let na = a, nb = b;
+                        if (th < 0 && (w0 + th * b) < 0) nb = Math.max(a, Math.min(b, -w0 / th));
+                        if (th > 0 && (w0 + th * a) < 0) na = Math.min(b, Math.max(a, -w0 / th));
+                        if (Math.abs(na - a) < 1e-9 && Math.abs(nb - b) < 1e-9) { conv = true; break; }
+                        a = na; b = nb;
+                        if (b - a < 1e-6) { a = 0; b = 0; }
+                    }
+                    const wAt = (x) => w0 + th * x;
+                    const c0 = ks * pile.spacingL;
+                    const Fs = (b > a) ? c0 * ((w0 * (b - a)) + (th * (b * b - a * a) / 2)) : 0;
+                    const rows = pileRows.map((x, i) => ({ id: i + 1, x, w: wAt(x), P: Kp * wAt(x) }));
+                    const qA = (b > a) ? ks * wAt(a) : 0;
+                    const qB = (b > a) ? ks * wAt(b) : 0;
+                    return { w0, th, a, b, conv, contact: B > 0 ? (b - a) / B : 0,
+                             Fs, share: Vg > 0 ? Fs / Vg : 0, rows,
+                             q_a: qA, q_b: qB, q_max: Math.max(qA, qB, 0),
+                             w_max: Math.max(wAt(0), wAt(B)), wAt };
                 };
 
                 const pileCaseOf = (c) => {
                     if (N_piles === 0 || !pile.usePiles) return null;
-                    let V_grp, P_grp, V_allow = 0, V_ex = 0, P_ex = 0;
-                    if (pile.designMode === 'full') {
-                        V_grp = (c.V / L) * pile.spacingL;
-                        P_grp = (sumP / L) * pile.spacingL;
-                    } else {
-                        V_allow = soilCapacityOf(c);
-                        V_ex = Math.max(0, c.V - V_allow);
-                        P_ex = Math.max(0, fsSlideReq * sumP - f_calc * c.V);
-                        V_grp = (V_ex / L) * pile.spacingL;
-                        P_grp = (P_ex / L) * pile.spacingL;
-                    }
-                    /* [C5] โมเมนต์ต้องอ้างอิง "CG กลุ่มเสาเข็ม" ให้ตรงกับสูตร P = V/N +- M*d/Sd^2
-                       ของเดิมใช้ M_excess = 1.5*MO - MR ซึ่งเป็นโมเมนต์รอบ "Toe" -> จุดอ้างอิงไม่ตรงกัน
-                       แก้เป็น: แรงที่เสาเข็มรับกระทำที่แนวแรงลัพธ์เดิม (X_bar) เช่นเดียวกับโหมด Full */
+                    const V_grp = (c.V / L) * pile.spacingL;
+                    const P_grp = (sumP / L) * pile.spacingL;
+                    /* [C5] โมเมนต์ต้องอ้างอิงจุดเดียวกับสูตรที่ใช้เสมอ */
                     const M_grp = V_grp * (x_cg_pile - c.X_bar);
+                    const M_toe = V_grp * c.X_bar;
+
+                    if (pile.designMode === 'raft') {
+                        const S = solveRaft(V_grp, M_toe, ks_raft, Kp_raft);  /* ออกแบบ: ดินช่วยรับ */
+                        const N = solveRaft(V_grp, M_toe, 0, Kp_raft);        /* ทนทาน: ดินไม่ช่วย */
+                        const rows = pileRows.map((x, i) => ({
+                            id: i + 1, x, d: x_cg_pile - x,
+                            p_axial: S ? S.rows[i].P : 0,
+                            n_axial: N ? N.rows[i].P : 0
+                        }));
+                        return { label: c.label, mode: 'raft', V_grp, M_grp, P_grp, rows,
+                                 V_shear: P_grp / N_piles, X_bar: c.X_bar, soil: S, nosoil: N };
+                    }
                     const rows = pileRows.map((x, i) => {
                         const d = x_cg_pile - x;
-                        return { id: i + 1, x, d,
-                                 p_axial: (V_grp / N_piles) + (sum_d2 > 0 ? (M_grp * d / sum_d2) : 0) };
+                        const p = (V_grp / N_piles) + (sum_d2 > 0 ? (M_grp * d / sum_d2) : 0);
+                        return { id: i + 1, x, d, p_axial: p, n_axial: p };
                     });
-                    return { label: c.label, V_grp, M_grp, P_grp, rows,
-                             V_shear: P_grp / N_piles, V_allow, V_ex, P_ex, X_bar: c.X_bar };
+                    return { label: c.label, mode: 'full', V_grp, M_grp, P_grp, rows,
+                             V_shear: P_grp / N_piles, X_bar: c.X_bar, soil: null, nosoil: null };
                 };
                 const pc1 = pileCaseOf(LC1);
                 const pc2 = pileCaseOf(LC2);
 
-                /* ผลรวมแบบ envelope: แรงกดสูงสุด และแรงถอนสูงสุด จากทั้งสองกรณีบรรทุก */
+                /* envelope จากทั้งสองกรณีบรรทุก แยกกรณีออกแบบ (ดินช่วย) กับกรณีทนทาน (ดินไม่ช่วย) */
                 const pile_results = (!pc1 || !pc2) ? [] : pileRows.map((x, i) => {
-                    const a = pc1.rows[i].p_axial, b = pc2.rows[i].p_axial;
+                    const a1 = pc1.rows[i].p_axial, a2 = pc2.rows[i].p_axial;
+                    const n1 = pc1.rows[i].n_axial, n2 = pc2.rows[i].n_axial;
                     return { id: i + 1, x, d: x_cg_pile - x,
-                             lc1: a, lc2: b,
-                             p_comp: Math.max(a, b, 0),          /* แรงกดสูงสุด (+) */
-                             p_ten:  Math.min(a, b, 0),          /* แรงถอนสูงสุด (-) */
-                             p_axial: Math.abs(a) >= Math.abs(b) ? a : b };
+                             lc1: a1, lc2: a2, n_lc1: n1, n_lc2: n2,
+                             p_comp: Math.max(a1, a2, 0), p_ten: Math.min(a1, a2, 0),
+                             n_comp: Math.max(n1, n2, 0), n_ten: Math.min(n1, n2, 0),
+                             p_axial: Math.abs(a1) >= Math.abs(a2) ? a1 : a2 };
                 });
                 const V_shear_pile = (!pc1 || !pc2) ? 0 : Math.max(pc1.V_shear, pc2.V_shear);
                 const govPile = (!pc1 || !pc2) ? null : (pc1.V_grp >= pc2.V_grp ? pc1 : pc2);
 
-                const okPileComp  = pile_results.every(p => p.p_comp <= pile.allowComp);
-                const okPileTen   = pile_results.every(p => Math.abs(p.p_ten) <= pile.allowTen);
+                /* ═══ [PR] ผลเฉพาะโหมด Piled Raft ═══ */
+                const raftMode = pile.usePiles && pile.designMode === 'raft' && N_piles > 0;
+                const robustF  = raftMode ? Math.max(1, raft.robust) : 1;
+                const raftCases = (raftMode && pc1 && pc2 && pc1.soil && pc2.soil) ? [pc1, pc2] : [];
+                /* กรณีวิกฤตของ raft = ที่ทรุดตัวมากที่สุด */
+                const raftGov = raftCases.length
+                    ? (pc1.soil.w_max >= pc2.soil.w_max ? pc1 : pc2) : null;
+                const raftS   = raftGov ? raftGov.soil : null;
+                const raftN   = raftGov ? raftGov.nosoil : null;
+                const okRaftSettle  = !raftMode || !raftS || ((raftS.w_max * 1000) <= raft.sLimit);
+                const okRaftQ       = !raftMode || !raftS || (raftS.q_max <= base.q_allow);
+                const okRaftContact = !raftMode || !!raft.contactOK;
+                const okRaftSolve   = !raftMode || (!!raftS && !!raftN && raftS.conv);
+
+                /* กรณีออกแบบต้อง <= พิกัดใช้งาน  และกรณีทนทาน (ดินไม่ช่วย) ต้อง <= พิกัด x robust */
+                /* ถ้าแก้สมการ raft ไม่สำเร็จ (เช่น ความแข็งเป็นศูนย์) ต้องไม่ขึ้นว่าผ่าน */
+                const okPileComp  = okRaftSolve
+                                 && pile_results.every(p => p.p_comp <= pile.allowComp)
+                                 && pile_results.every(p => p.n_comp <= pile.allowComp * robustF);
+                const okPileTen   = okRaftSolve
+                                 && pile_results.every(p => Math.abs(p.p_ten) <= pile.allowTen)
+                                 && pile_results.every(p => Math.abs(p.n_ten) <= pile.allowTen * robustF);
                 /* ═══ กำลังรับแรงเฉือนของเสาเข็ม — แหล่งความจริงเดียว ═══
                    ทุกจุดที่แสดงผลต้องอ้าง shearCap ตัวนี้ ห้ามอ่าน pile.allowShear ตรงๆ
                    มิฉะนั้นป้ายกับเงื่อนไขจะไม่ตรงกัน */
@@ -944,10 +1029,12 @@
                     N_piles, x_cg_pile, sum_d2, pile_results, V_shear_pile,
                     shearCap, shearFromBroms, shearCapValid, shearRatio,
                     pc1, pc2, govPile, okPileComp, okPileTen, okPileShear,
+                    ks_raft, Kp_raft, raftMode, robustF, raftGov, raftS, raftN,
+                    okRaftSettle, okRaftQ, okRaftContact, okRaftSolve,
                     V_pile, P_pile, M_cg_pile, V_design_sp, M_design_sp, P_design_sp
                 };
             }, [soil, base, surcharge, geom, designLength, pile, pileRows,
-                pressureMode, useUplift, upliftMode, fsOtReq, fsSlideReq, gamma_conc, lat, lateral]);
+                pressureMode, useUplift, upliftMode, fsOtReq, fsSlideReq, gamma_conc, lat, lateral, raft]);
 
             const handleNum = (setter, field) => (e) => {
                 setter(prev => ({ ...prev, [field]: parseFloat(e.target.value) || 0 }));
@@ -976,6 +1063,9 @@
                     }));
                 }
             };
+
+            const handleRaft = (field) => (e) =>
+                setRaft(prev => Object.assign({}, prev, { [field]: parseFloat(e.target.value) || 0 }));
 
             const handleLat = (field) => (e) => {
                 const v = e.target.value;
@@ -1431,14 +1521,51 @@
                                             <h4 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2 print:border-none print:pb-0">3. สมมติฐานการรับแรง (Design Assumption)</h4>
                                             <div className="space-y-2">
                                                 <label className="flex items-center space-x-2 text-sm cursor-pointer hover:bg-white p-2 rounded border border-transparent hover:border-slate-200 shadow-sm transition print:shadow-none print:border-none print:p-0">
-                                                    <input type="radio" name="designMode" value="excess" checked={pile.designMode === 'excess'} onChange={() => setPile(prev => ({...prev, designMode: 'excess'}))} className="accent-indigo-600 w-4 h-4" />
-                                                    <span className="text-slate-700 font-medium">รับเฉพาะส่วนเกิน (Excess Forces Only)</span>
+                                                    <input type="radio" name="designMode" value="raft" checked={pile.designMode === 'raft'} onChange={() => setPile(prev => ({...prev, designMode: 'raft'}))} className="accent-indigo-600 w-4 h-4" />
+                                                    <span className="text-slate-700 font-medium">ฐานรากร่วม ดิน+เสาเข็ม (Piled Raft)</span>
                                                 </label>
                                                 <label className="flex items-center space-x-2 text-sm cursor-pointer hover:bg-white p-2 rounded border border-transparent hover:border-slate-200 shadow-sm transition print:shadow-none print:border-none print:p-0">
                                                     <input type="radio" name="designMode" value="full" checked={pile.designMode === 'full'} onChange={() => setPile(prev => ({...prev, designMode: 'full'}))} className="accent-indigo-600 w-4 h-4" />
                                                     <span className="text-slate-700 font-medium">รับแรงทั้งหมด (Full Load - Elastic Center)</span>
                                                 </label>
                                             </div>
+
+                                            {pile.designMode === 'raft' && (
+                                                <div className="mt-4 pt-3 border-t border-dashed border-indigo-200 space-y-3">
+                                                    <div className="text-[11px] leading-snug bg-indigo-50 print:bg-transparent border border-indigo-200 text-indigo-900 rounded p-2">
+                                                        แบ่งแรงด้วย <strong>ความแข็ง</strong> ไม่ใช่กำลัง จึงต้องกรอก <strong>การทรุดตัว</strong> ของทั้งสองระบบ
+                                                        โปรแกรมจะแปลงเป็นค่าความแข็งแล้วแก้สมการความเข้ากันได้ให้เอง
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <LatField label={<span>ดินทรุดเมื่อรับ q<Sub text="allow"/> เต็ม</span>}
+                                                            value={raft.sSoil} onChange={handleRaft('sSoil')} unit="มม." />
+                                                        <LatField label="เข็มทรุดที่แรงใช้งาน (load test)"
+                                                            value={raft.sPile} onChange={handleRaft('sPile')} unit="มม." />
+                                                        <LatField label="ขีดจำกัดการทรุดตัว"
+                                                            value={raft.sLimit} onChange={handleRaft('sLimit')} unit="มม." />
+                                                        <LatField label="ตัวคูณกำลัง กรณีดินไม่ช่วย"
+                                                            value={raft.robust} onChange={handleRaft('robust')} />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-2 text-[11px] text-center">
+                                                        <div className="bg-white print:bg-transparent p-1.5 rounded border border-slate-200">
+                                                            k<Sub text="s"/> = <strong>{calc.ks_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong> กก./ม.³
+                                                        </div>
+                                                        <div className="bg-white print:bg-transparent p-1.5 rounded border border-slate-200">
+                                                            K<Sub text="pile"/> = <strong>{calc.Kp_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong> กก./ม.
+                                                        </div>
+                                                    </div>
+                                                    <label className={`flex items-start space-x-2 cursor-pointer p-2 rounded border ${raft.contactOK ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-300'}`}>
+                                                        <input type="checkbox" className="w-4 h-4 accent-emerald-600 rounded mt-0.5 shrink-0"
+                                                            checked={raft.contactOK}
+                                                            onChange={(e) => setRaft(p => Object.assign({}, p, { contactOK: e.target.checked }))} />
+                                                        <span className="text-[11px] leading-snug text-slate-700">
+                                                            <strong>ยืนยัน</strong> ว่าฐานรากจะสัมผัสดินเดิมตลอดอายุใช้งาน (หล่อบนดินที่เตรียมพื้นดี
+                                                            ไม่มีการทรุดตัวของดินใต้ฐานตามหลัง ไม่มีการขุดเปิดฝั่ง Toe ภายหลัง)
+                                                            &mdash; ถ้ายืนยันไม่ได้ ต้องใช้โหมด Full Load
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -1638,7 +1765,7 @@
                                             ผลตรวจสอบหลัก &mdash; ระบบฐานรากเสาเข็ม
                                         </h4>
                                         <span className="text-xs text-slate-500">
-                                            {pile.designMode === 'full' ? 'Full Load' : 'Excess'} &middot; {calc.N_piles} แถว &middot; ช่วง {pile.spacingL} ม.
+                                            {pile.designMode === 'full' ? 'Full Load' : 'Piled Raft'} &middot; {calc.N_piles} แถว &middot; ช่วง {pile.spacingL} ม.
                                         </span>
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-6 print:gap-4">
@@ -1677,7 +1804,7 @@
                                     <div className={`mt-3 p-3 rounded-lg border text-xs leading-relaxed print:break-inside-avoid ${pile.designMode === 'full' ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-amber-50 border-amber-200 text-amber-900'}`}>
                                         {pile.designMode === 'full'
                                             ? <span>เมื่อเสาเข็มรับแรงทั้งหมด F.S. พลิกคว่ำ/ลื่นไถล และ q<Sub text="max"/> ข้างบน <strong>ไม่ใช่กลไกวิบัติที่ควบคุมการออกแบบ</strong> กำแพงบนเสาเข็มต้านการพลิกคว่ำด้วยคู่แรงกด-แรงถอนในเข็ม และต้านการลื่นไถลด้วยแรงด้านข้างของเข็ม ตัวเลขชุดนี้แสดงไว้เพื่อเปรียบเทียบเท่านั้น</span>
-                                            : <span><strong>โหมด Excess:</strong> สมมติว่าดินเดิมยังรับแรงร่วมกับเสาเข็ม ทั้งสองชุดจึงต้องผ่านพร้อมกัน โปรดอ่านคำเตือนในแท็บ "แรงเสาเข็ม" ว่าวิธีนี้ไม่ใช่วิธีออกแบบตามมาตรฐาน</span>}
+                                            : <span><strong>โหมด Piled Raft:</strong> ดินใต้ฐานรับแรงร่วมกับเสาเข็ม {calc.raftS ? (100 * calc.raftS.share).toFixed(0) + '%' : '-'} โดยแบ่งตามความแข็ง ค่า q<Sub text="max"/> ในการ์ดชุดนี้เป็นวิธีคลาสสิกที่ไม่คิดเสาเข็ม ค่าที่ใช้จริงดูในแท็บ "แรงเสาเข็ม"</span>}
                                     </div>
                                 </div>
                             </div>
@@ -1705,7 +1832,7 @@
 
                                     <line x1={x0} y1={y0} x2={x0 + svgB} y2={y0} stroke="#475569" strokeWidth="2" />
                                     
-                                    {(!pile.usePiles || pile.designMode === 'excess') && calc.bearingValid && (
+                                    {!pile.usePiles && calc.bearingValid && (
                                         <g>
                                             <polygon points={qPoly}
                                                 fill={calc.bearingMode === 'triangle' ? "url(#tensionHatch)" : "url(#diagonalHatch)"}
@@ -1733,7 +1860,7 @@
                                             )}
                                         </g>
                                     )}
-                                    {(!pile.usePiles || pile.designMode === 'excess') && !calc.bearingValid && (
+                                    {!pile.usePiles && !calc.bearingValid && (
                                         <text x={x0 + svgB / 2} y={y0 + 45} fill="#be123c" fontSize="15" fontWeight="bold" textAnchor="middle">
                                             แรงลัพธ์ตกนอกหน้าฐานราก
                                         </text>
@@ -2686,29 +2813,37 @@
                     <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-6 print:break-inside-avoid animate-[fadeIn_0.3s_ease-in-out]">
                         <h3 className="font-bold text-lg text-indigo-800 border-b border-indigo-100 pb-2">คำนวณแรงปฏิกิริยาในเสาเข็ม (Pile Reactions)</h3>
 
-                        {/* ═══ [C5] คำเตือนโหมด Excess ═══ */}
-                        {pile.designMode === 'excess' && (
-                            <div className="bg-rose-50 border-2 border-rose-300 text-rose-900 p-4 rounded-lg text-sm print:break-inside-avoid">
-                                <div className="font-bold mb-2 flex items-center space-x-2">
-                                    <svg className="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-                                    <span>[C5] โหมด "รับเฉพาะส่วนเกิน" ไม่ใช่วิธีออกแบบตามมาตรฐาน</span>
+                        {/* ═══ [PR] แผงสรุปโหมด Piled Raft ═══ */}
+                        {pile.designMode === 'raft' && (
+                            <div className={`p-4 rounded-lg text-sm print:break-inside-avoid border-2 ${calc.okRaftContact && calc.okRaftSolve ? 'bg-indigo-50 border-indigo-300 text-indigo-900' : 'bg-rose-50 border-rose-300 text-rose-900'}`}>
+                                <div className="font-bold mb-2">โหมด Piled Raft &mdash; แบ่งแรงด้วยความแข็ง ไม่ใช่กำลัง</div>
+                                <div className="text-[13px] leading-snug">
+                                    ฐานรากถือเป็นแผ่นแกร่ง การเคลื่อนตัว w(x) = w<Sub text="0"/> + &theta;&middot;x
+                                    แก้ระบบสมการ 2&times;2 จากสมดุลแรงและโมเมนต์ พร้อมวนซ้ำตัดช่วงที่ดินจะต้องรับแรงดึงออก
+                                    ส่วนแบ่งแรงจึงเป็นผลลัพธ์ ไม่ใช่สมมติฐาน
                                 </div>
-                                <ul className="list-disc pl-6 space-y-1 text-[13px] leading-snug">
-                                    <li>เมื่อตอกเสาเข็มแล้ว สติฟเนสของเข็มสูงกว่าดินมาก เข็มจะรับแรงเกือบทั้งหมด การสมมติให้ดินยังช่วยรับอยู่จึงไม่ปลอดภัย</li>
-                                    <li>ผลลัพธ์โหมดนี้จะได้แรงในเข็มต่ำกว่าโหมด Full Load อย่างมีนัยสำคัญ</li>
-                                    <li>แนะนำให้ใช้ <strong>Full Load (Elastic Center)</strong> สำหรับการออกแบบจริง</li>
-                                </ul>
+                                {!calc.okRaftContact && (
+                                    <div className="mt-3 bg-rose-100 border border-rose-400 rounded p-2 font-bold text-[13px]">
+                                        ยังไม่ได้ยืนยันว่าฐานรากสัมผัสดินตลอดอายุใช้งาน &mdash; ผลการตรวจสอบยังถือว่าไม่ผ่าน
+                                        ให้ติ๊กยืนยันในแท็บพารามิเตอร์ หรือเปลี่ยนไปใช้โหมด Full Load
+                                    </div>
+                                )}
+                                {!calc.okRaftSolve && (
+                                    <div className="mt-3 bg-rose-100 border border-rose-400 rounded p-2 font-bold text-[13px]">
+                                        แก้สมการไม่สำเร็จ ตรวจว่ากรอกการทรุดตัวของเข็มและของดินเป็นค่าที่มากกว่าศูนย์
+                                    </div>
+                                )}
                                 {stabilityFails && (
-                                    <div className="mt-3 bg-rose-100 border border-rose-400 rounded p-2 font-bold">
-                                        เสถียรภาพฐานรากดินเดิมไม่ผ่านเกณฑ์ ({!calc.okOT && 'พลิกคว่ำ'}{!calc.okOT && !calc.okSlide && ' และ '}{!calc.okSlide && 'ลื่นไถล'})
-                                        โหมดนี้พิสูจน์เสถียรภาพไม่ได้ ต้องเปลี่ยนไปใช้ Full Load
+                                    <div className="mt-3 bg-amber-100 border border-amber-400 text-amber-900 rounded p-2 text-[13px]">
+                                        หมายเหตุ: F.S. พลิกคว่ำ/ลื่นไถล ของกรณีวางบนดินเดิมไม่ผ่าน แต่ค่าเหล่านั้นไม่ใช่กลไกวิบัติของฐานรากเสาเข็ม
+                                        ให้ดูผลของเสาเข็มด้านล่างเป็นเกณฑ์แทน
                                     </div>
                                 )}
                             </div>
                         )}
 
                         <div className="bg-indigo-50 print:bg-white text-indigo-900 print:text-slate-800 p-4 rounded-lg text-sm font-medium border border-indigo-100 print:border-slate-300 shadow-sm">
-                            <div className="mb-2 font-bold">สมมติฐาน: {pile.designMode === 'full' ? 'Full Load (Elastic Center)' : 'รับเฉพาะส่วนเกิน (Excess)'} &nbsp;|&nbsp; ช่วงเสาเข็ม S<Sub text="L"/> = {pile.spacingL} ม. &nbsp;|&nbsp; N = {calc.N_piles} แถว</div>
+                            <div className="mb-2 font-bold">สมมติฐาน: {pile.designMode === 'full' ? 'Full Load (Elastic Center)' : 'Piled Raft (ดิน+เสาเข็มร่วมกัน)'} &nbsp;|&nbsp; ช่วงเสาเข็ม S<Sub text="L"/> = {pile.spacingL} ม. &nbsp;|&nbsp; N = {calc.N_piles} แถว</div>
                             <div className="grid grid-cols-1 md:grid-cols-3 print:grid-cols-3 gap-3">
                                 <div>X<Sub text="CG เสาเข็ม"/> = {calc.x_cg_pile.toFixed(3)} ม.</div>
                                 <div>&Sigma;d&sup2; = {calc.sum_d2.toFixed(4)} ม.&sup2;</div>
@@ -2727,7 +2862,7 @@
                                 <thead>
                                     <tr className="border-b border-slate-300 text-slate-600">
                                         <th className="py-2">กรณี</th>
-                                        {pile.designMode === 'excess' && <th>V<Sub text="ดินรับได้"/></th>}
+
                                         <th>V<Sub text="กลุ่ม"/> (กก.)</th>
                                         <th><span className="overline">X</span> (ม.)</th>
                                         <th>e<Sub text="p"/> = X<Sub text="CG"/> - <span className="overline">X</span></th>
@@ -2739,7 +2874,7 @@
                                     {pcs.map(pc => (
                                         <tr key={pc.label} className="border-b border-slate-100">
                                             <td className="py-2 font-semibold">{pc.label}</td>
-                                            {pile.designMode === 'excess' && <td>{pc.V_allow.toFixed(0)}</td>}
+
                                             <td>{pc.V_grp.toFixed(0)}</td>
                                             <td>{pc.X_bar.toFixed(3)}</td>
                                             <td>{(calc.x_cg_pile - pc.X_bar).toFixed(3)}</td>
@@ -2770,8 +2905,10 @@
                                         <th>d (ม.)</th>
                                         <th>LC1 (กก.)</th>
                                         <th>LC2 (กก.)</th>
-                                        <th>แรงกดสูงสุด</th>
+                                        <th>{calc.raftMode ? 'ออกแบบ (ดินช่วย)' : 'แรงกดสูงสุด'}</th>
                                         <th>ตรวจแรงกด</th>
+                                        {calc.raftMode && <th>ทนทาน (ดินไม่ช่วย)</th>}
+                                        {calc.raftMode && <th>ตรวจทนทาน</th>}
                                         <th>แรงถอนสูงสุด</th>
                                         <th>ตรวจแรงถอน</th>
                                     </tr>
@@ -2786,6 +2923,10 @@
                                             <td>{p.lc2.toFixed(0)}</td>
                                             <td className="font-bold text-rose-600">{p.p_comp.toFixed(0)}</td>
                                             <td><Badge condition={p.p_comp <= pile.allowComp} textTrue={`\u2264 ${pile.allowComp}`} textFalse={`\u003E ${pile.allowComp}`} /></td>
+                                            {calc.raftMode && <td className="font-bold text-slate-700">{p.n_comp.toFixed(0)}</td>}
+                                            {calc.raftMode && <td><Badge condition={p.n_comp <= pile.allowComp * calc.robustF}
+                                                textTrue={`\u2264 ${(pile.allowComp * calc.robustF).toFixed(0)}`}
+                                                textFalse={`\u003E ${(pile.allowComp * calc.robustF).toFixed(0)}`} /></td>}
                                             <td className="font-bold text-blue-600">{Math.abs(p.p_ten).toFixed(0)}</td>
                                             <td>{Math.abs(p.p_ten) < 1
                                                 ? <span className="text-slate-400 text-xs">ไม่มีแรงถอน</span>
@@ -2828,8 +2969,86 @@
                             </div>
                         </StepBox>
 
+                        {calc.raftMode && calc.raftS && calc.raftN && (
+                            <StepBox title="3. การแบ่งแรงระหว่างดินกับเสาเข็ม (Piled Raft)">
+                                <div className="text-xs bg-indigo-50 print:bg-transparent border border-indigo-200 text-indigo-900 rounded p-2 mb-4 leading-snug">
+                                    ความแข็งได้จากการทรุดตัวที่กรอกไว้:
+                                    k<Sub text="s"/> = q<Sub text="allow"/> &divide; s<Sub text="soil"/> = {base.q_allow} &divide; {(raft.sSoil / 1000).toFixed(4)} = <strong>{calc.ks_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong> กก./ม.³
+                                    &nbsp;|&nbsp;
+                                    K<Sub text="pile"/> = P<Sub text="ใช้งาน"/> &divide; s<Sub text="pile"/> = {pile.allowComp} &divide; {(raft.sPile / 1000).toFixed(4)} = <strong>{calc.Kp_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })}</strong> กก./ม.
+                                </div>
+
+                                <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3 mb-4 text-xs">
+                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
+                                        <div className="text-slate-500">ดินรับ</div>
+                                        <div className="font-bold text-lg text-emerald-700">{(100 * calc.raftS.share).toFixed(1)}%</div>
+                                        <div className="text-slate-400 text-[10px]">{calc.raftS.Fs.toFixed(0)} กก.</div>
+                                    </div>
+                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
+                                        <div className="text-slate-500">เสาเข็มรับ</div>
+                                        <div className="font-bold text-lg text-indigo-700">{(100 * (1 - calc.raftS.share)).toFixed(1)}%</div>
+                                        <div className="text-slate-400 text-[10px]">{(calc.raftGov.V_grp - calc.raftS.Fs).toFixed(0)} กก.</div>
+                                    </div>
+                                    <div className={`p-2 rounded border text-center ${calc.okRaftSettle ? 'bg-white border-slate-200' : 'bg-rose-50 border-rose-300'} print:bg-transparent`}>
+                                        <div className="text-slate-500">ทรุดตัวสูงสุด</div>
+                                        <div className="font-bold text-lg text-slate-700">{(calc.raftS.w_max * 1000).toFixed(2)}</div>
+                                        <div className="text-slate-400 text-[10px]">มม. (จำกัด {raft.sLimit})</div>
+                                    </div>
+                                    <div className={`p-2 rounded border text-center ${calc.okRaftQ ? 'bg-white border-slate-200' : 'bg-rose-50 border-rose-300'} print:bg-transparent`}>
+                                        <div className="text-slate-500">q ใต้ฐานสูงสุด</div>
+                                        <div className="font-bold text-lg text-slate-700">{calc.raftS.q_max.toFixed(0)}</div>
+                                        <div className="text-slate-400 text-[10px]">{(100 * calc.raftS.q_max / Math.max(base.q_allow, 1)).toFixed(0)}% ของ q<Sub text="allow"/></div>
+                                    </div>
+                                </div>
+
+                                <table className="w-full text-left border-collapse text-sm print:text-xs mb-4">
+                                    <thead>
+                                        <tr className="border-b border-slate-300 text-slate-600">
+                                            <th className="py-2">ผลการแก้สมการ (กรณีวิกฤต {calc.raftGov.label})</th>
+                                            <th>ค่า</th>
+                                            <th>หมายเหตุ</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr className="border-b border-slate-100"><td className="py-2">w<Sub text="0"/> (ทรุดที่ Toe)</td>
+                                            <td>{(calc.raftS.wAt(0) * 1000).toFixed(3)} มม.</td><td className="text-slate-500 text-xs">ที่ x = 0</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-2">w ที่ Heel</td>
+                                            <td>{(calc.raftS.wAt(calc.B) * 1000).toFixed(3)} มม.</td><td className="text-slate-500 text-xs">ที่ x = B</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-2">&theta; (การหมุน)</td>
+                                            <td>{Math.abs(calc.raftS.th) > 1e-9 ? '1/' + Math.round(1 / Math.abs(calc.raftS.th)).toLocaleString() : '0'}</td>
+                                            <td className="text-slate-500 text-xs">ยอดกำแพงเคลื่อน {(Math.abs(calc.raftS.th) * calc.H_tot * 1000).toFixed(1)} มม.</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-2">ช่วงที่ดินสัมผัสฐาน</td>
+                                            <td>{(100 * calc.raftS.contact).toFixed(0)}% ของ B</td>
+                                            <td className="text-slate-500 text-xs">x = {calc.raftS.a.toFixed(2)} ถึง {calc.raftS.b.toFixed(2)} ม.</td></tr>
+                                    </tbody>
+                                </table>
+
+                                <div className={`p-3 rounded-lg border-2 print:break-inside-avoid ${calc.okPileComp ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'}`}>
+                                    <div className="font-bold text-sm mb-2">กรณีตรวจความทนทาน &mdash; ถ้าดินหลุดจากใต้ฐาน (k<Sub text="s"/> = 0)</div>
+                                    <div className="text-[13px] leading-snug text-slate-700">
+                                        แรงในเข็มแถววิกฤตเพิ่มจาก <strong>{Math.max.apply(null, calc.pile_results.map(p => p.p_comp)).toFixed(0)}</strong> เป็น <strong>{Math.max.apply(null, calc.pile_results.map(p => p.n_comp)).toFixed(0)}</strong> กก.
+                                        {' '}(เพิ่ม {(100 * (Math.max.apply(null, calc.pile_results.map(p => p.n_comp)) / Math.max(1, Math.max.apply(null, calc.pile_results.map(p => p.p_comp))) - 1)).toFixed(0)}%)
+                                        {' '}เทียบกับพิกัดที่ยอมให้ในกรณีนี้ {(pile.allowComp * calc.robustF).toFixed(0)} กก.
+                                        {' '}({calc.robustF > 1 ? 'พิกัดใช้งาน \u00D7 ' + calc.robustF.toFixed(2) : 'พิกัดใช้งาน'})
+                                    </div>
+                                    <div className="mt-2 text-xs text-slate-600 leading-relaxed border-t border-slate-300 pt-2">
+                                        <strong>หลักการ:</strong> ให้ดินเป็นตัวช่วยเรื่องการใช้งาน (ลดการทรุดตัวและแรงในเข็ม)
+                                        แต่ความปลอดภัยขั้นสุดท้ายต้องไม่ฝากไว้กับมัน ทั้งสองกรณีจึงต้องผ่านพร้อมกัน
+                                        {calc.robustF > 1 && <span className="text-amber-700"> &mdash; การตั้งตัวคูณ {calc.robustF.toFixed(2)} คือการยอมกินเข้าไปในส่วนความปลอดภัยของเข็ม ต้องมีเหตุผลรองรับตามมาตรฐานที่ใช้</span>}
+                                    </div>
+                                </div>
+
+                                <div className="mt-3 text-xs text-slate-500 leading-relaxed">
+                                    <strong>เงื่อนไขที่ต้องเป็นจริง:</strong> ฐานหล่อบนดินเดิมที่เตรียมพื้นดี &middot; ดินใต้ฐานไม่อัดตัวคายน้ำหรือทรุดตามหลัง
+                                    &middot; ไม่มีการขุดเปิดหรือกัดเซาะฝั่ง Toe ภายหลัง &middot; ยอมรับการทรุดตัวที่คำนวณได้
+                                    &middot; K<Sub text="pile"/> ควรมาจากผลทดสอบ static load test ไม่ใช่การประมาณ
+                                    &middot; ออกแบบตัวฐานรากด้วยค่าครอบคลุมทั้งสองกรณี (แรงกระจายใต้ฐาน กับ แรงกระจุกที่หัวเข็ม)
+                                </div>
+                            </StepBox>
+                        )}
+
                         {lat.enabled && (
-                            <StepBox title="3. กำลังรับแรงด้านข้างของเสาเข็ม (Broms + เกณฑ์ระยะโก่ง)">
+                            <StepBox title="4. กำลังรับแรงด้านข้างของเสาเข็ม (Broms + เกณฑ์ระยะโก่ง)">
                                 <div className="text-xs bg-cyan-50 print:bg-transparent border border-cyan-200 text-cyan-900 rounded p-2 mb-4 leading-snug">
                                     แรงด้านข้างเกือบทั้งหมดถ่ายลงดินในช่วง <strong>{lateral.charLen.toFixed(1)} ม. บนสุด</strong> ({lat.soilType === 'clay' ? '1/β' : 'T'} = ระยะยาวลักษณะ)
                                     ความยาวเข็มที่เกินจากนี้แทบไม่ช่วยเพิ่มกำลังด้านข้าง จึงต้องใช้ค่าดินของชั้นบนสุด ไม่ใช่ค่าเฉลี่ยตลอดความลึก
