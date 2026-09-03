@@ -182,7 +182,7 @@
 
             // Global Inputs State
             const [soil, setSoil] = useState({ gamma_c: 1900, gamma_sat: 2100, phi_backfill: 30, phi_base: 35 });
-            const [base, setBase] = useState({ q_allow: 8000 });
+            const [base, setBase] = useState({ q_allow: 10000 });
             const [surcharge, setSurcharge] = useState(500);
             const [designLength, setDesignLength] = useState(1.0);
 
@@ -198,22 +198,22 @@
             const [gamma_conc, setGammaConc]  = useState(2400);
             
             // Geometry State
-            const [geom, setGeom] = useState({ H: 2.0, C: 0.0, D: 0.6, G: 0.25, F: 2.0, T1: 0.3, waterDepth: 1.5 });
+            const [geom, setGeom] = useState({ H: 5.0, C: 0.0, D: 0.6, G: 0.20, F: 4.2, T1: 0.5, waterDepth: 0.0 });
             // มีน้ำอยู่เหนือระดับก้นฐานรากหรือไม่ (ใช้เลือกค่า n_h แบบจมน้ำของดินทราย)
             const calcWaterAtBase = geom.waterDepth < (geom.H + geom.T1);
 
             // Pile Foundation State
             const [pile, setPile] = useState({
                 usePiles: true,
-                designMode: 'full',   // [C5] เดิม 'excess' ซึ่งไม่ใช่วิธีออกแบบตามมาตรฐาน
+                designMode: 'excess',
                 spacingL: 2.0,       
-                allowComp: 35000,    
+                allowComp: 17000,    
                 allowTen: 10500,     
                 allowShear: 2500     
             });
-            const [pileRows, setPileRows] = useState([0.4, 2.1]); 
+            const [pileRows, setPileRows] = useState([0.6, 1.8, 3.0, 4.2]); 
 
-            const [pileType, setPileType] = useState('sq26');
+            const [pileType, setPileType] = useState('custom');
             const pileProfiles = {
                 'sq22':   { name: 'สี่เหลี่ยมตัน 0.22x0.22 ม.', comp: 25000, ten: 7500,  shear: 1500, D: 0.22, di: 0, shape: 'square' },
                 'sq26':   { name: 'สี่เหลี่ยมตัน 0.26x0.26 ม.', comp: 35000, ten: 10500, shear: 2500, D: 0.26, di: 0, shape: 'square' },
