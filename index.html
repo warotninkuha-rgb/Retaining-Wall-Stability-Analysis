@@ -338,8 +338,14 @@
                   ตรวจสอบแล้วว่า solveRaft(ks=0) ให้ผลตรงกับสูตร elastic center เดิมทุกหลัก
            v3.1 — เขียนอภิธานศัพท์ในแท็บคู่มือใหม่ทั้งหมด 13 หมวด 115 รายการ
                   ครอบคลุมตัวแปรและพารามิเตอร์ทุกตัวที่โปรแกรมใช้จริง
+           v3.2 — [PR-H] แก้ความไม่สอดคล้อง: โหมด Piled Raft แบ่งแรงแนวดิ่งให้ดินช่วยรับ
+                  แต่แนวราบยังให้เสาเข็มรับ 100% ทั้งที่ก้นฐานมีแรงกด F_soil อยู่จริง
+                  จึงต้องมีแรงเสียดทาน f x F_soil ช่วยด้วย (ใช้ F_soil ไม่ใช่ SumV)
+                  หารด้วย F.S. ลื่นไถลก่อนใช้ เพราะเป็นค่าประลัย และรันกรณีทนทาน
+                  (ไม่มีเสียดทาน เข็มรับทั้งหมด) คู่กันเสมอ ต้องผ่านทั้งสองกรณี
+                  โหมด Full Load ไม่คิดเสียดทานเหมือนเดิม เพราะสมมติว่าดินไม่รับแรงกด
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v3.1 (Piled Raft + Broms + อภิธานศัพท์ครบ)';
+        const APP_VERSION = 'v3.2 (Piled Raft + แรงเสียดทานก้นฐาน)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -882,6 +888,8 @@
                 const okEcc   = cases.every(c => c.inMid);
 
                 /* ── [C5] แรงในเสาเข็ม ────────────────────────────────────────────── */
+                const robustF = (pile.usePiles && pile.designMode === 'raft')
+                    ? Math.max(1, raft.robust) : 1;
                 const N_piles = pileRows.length;
                 const x_cg_pile = N_piles > 0 ? pileRows.reduce((sum, x) => sum + x, 0) / N_piles : 0;
                 let sum_d2 = 0;
@@ -950,16 +958,34 @@
                             p_axial: S ? S.rows[i].P : 0,
                             n_axial: N ? N.rows[i].P : 0
                         }));
+                        /* ═══ [PR-H] แรงราบ: ก้นฐานมีแรงกดจริง จึงมีแรงเสียดทานช่วยรับ ═══
+                           แรงตั้งฉากที่ใช้ = F_soil ที่ได้จากการแก้สมการ (หักแรงยกใต้ฐานไปแล้ว)
+                           ไม่ใช่ SumV ทั้งก้อน เพราะส่วนที่เหลือถ่ายลงเสาเข็มไม่ได้กดที่ก้นฐาน
+                           แรงเสียดทานเป็นค่าประลัย จึงหารด้วย F.S. ลื่นไถลก่อนนำมาใช้
+                           ส่วนกำลังด้านข้างของเข็มเป็นค่าใช้งานอยู่แล้ว จึงไม่หารซ้ำ */
+                        const Fs_soil = S ? Math.max(0, S.Fs) : 0;
+                        const H_fric_ult = f_calc * Fs_soil;
+                        const H_fric_use = H_fric_ult / Math.max(1, fsSlideReq);
+                        const H_pile_d = Math.max(0, P_grp - H_fric_use);   /* เข็มรับส่วนที่เหลือ */
                         return { label: c.label, mode: 'raft', V_grp, M_grp, P_grp, rows,
-                                 V_shear: P_grp / N_piles, X_bar: c.X_bar, soil: S, nosoil: N };
+                                 Fs_soil, H_fric_ult, H_fric_use,
+                                 H_pile_d, H_pile_n: P_grp,
+                                 V_shear: H_pile_d / N_piles,      /* กรณีออกแบบ */
+                                 V_shear_n: P_grp / N_piles,       /* กรณีทนทาน ดินไม่ช่วย */
+                                 X_bar: c.X_bar, soil: S, nosoil: N };
                     }
                     const rows = pileRows.map((x, i) => {
                         const d = x_cg_pile - x;
                         const p = (V_grp / N_piles) + (sum_d2 > 0 ? (M_grp * d / sum_d2) : 0);
                         return { id: i + 1, x, d, p_axial: p, n_axial: p };
                     });
+                    /* โหมด Full Load: สมมติว่าดินไม่รับแรงกดเลย จึงไม่มีแรงตั้งฉากที่ก้นฐาน
+                       และไม่มีแรงเสียดทานมาช่วย ซึ่งสอดคล้องกันในตัวเอง */
                     return { label: c.label, mode: 'full', V_grp, M_grp, P_grp, rows,
-                             V_shear: P_grp / N_piles, X_bar: c.X_bar, soil: null, nosoil: null };
+                             Fs_soil: 0, H_fric_ult: 0, H_fric_use: 0,
+                             H_pile_d: P_grp, H_pile_n: P_grp,
+                             V_shear: P_grp / N_piles, V_shear_n: P_grp / N_piles,
+                             X_bar: c.X_bar, soil: null, nosoil: null };
                 };
                 const pc1 = pileCaseOf(LC1);
                 const pc2 = pileCaseOf(LC2);
@@ -974,12 +1000,14 @@
                              n_comp: Math.max(n1, n2, 0), n_ten: Math.min(n1, n2, 0),
                              p_axial: Math.abs(a1) >= Math.abs(a2) ? a1 : a2 };
                 });
-                const V_shear_pile = (!pc1 || !pc2) ? 0 : Math.max(pc1.V_shear, pc2.V_shear);
+                const V_shear_pile   = (!pc1 || !pc2) ? 0 : Math.max(pc1.V_shear, pc2.V_shear);
+                const V_shear_pile_n = (!pc1 || !pc2) ? 0 : Math.max(pc1.V_shear_n, pc2.V_shear_n);
+                /* กรณีวิกฤตของแรงเสียดทาน = กรณีที่ดินรับแรงกดน้อยที่สุด */
+                const fricGov = (!pc1 || !pc2) ? null : (pc1.H_fric_use <= pc2.H_fric_use ? pc1 : pc2);
                 const govPile = (!pc1 || !pc2) ? null : (pc1.V_grp >= pc2.V_grp ? pc1 : pc2);
 
                 /* ═══ [PR] ผลเฉพาะโหมด Piled Raft ═══ */
                 const raftMode = pile.usePiles && pile.designMode === 'raft' && N_piles > 0;
-                const robustF  = raftMode ? Math.max(1, raft.robust) : 1;
                 const raftCases = (raftMode && pc1 && pc2 && pc1.soil && pc2.soil) ? [pc1, pc2] : [];
                 /* กรณีวิกฤตของ raft = ที่ทรุดตัวมากที่สุด */
                 const raftGov = raftCases.length
@@ -1006,8 +1034,18 @@
                 const shearCap       = shearFromBroms ? lateral.H_allow_kg : pile.allowShear;
                 /* กำลัง <= 0 ไม่ใช่ "ผ่าน" แต่แปลว่ายังไม่ได้กำหนดกำลัง จึงต้องไม่ผ่าน */
                 const shearCapValid  = shearCap > 0;
-                const okPileShear    = shearCapValid && V_shear_pile <= shearCap;
+                /* กรณีออกแบบต้อง <= พิกัด และกรณีทนทาน (ไม่มีแรงเสียดทาน) ต้อง <= พิกัด x robust
+                   หลักการเดียวกับแนวดิ่ง: ให้ดินช่วยเรื่องการใช้งาน แต่ห้ามฝากความปลอดภัยไว้กับมัน */
+                const okPileShear    = shearCapValid
+                                    && V_shear_pile <= shearCap
+                                    && V_shear_pile_n <= shearCap * robustF;
                 const shearRatio     = shearCapValid ? V_shear_pile / shearCap : Infinity;
+                const shearRatioN    = shearCapValid ? V_shear_pile_n / (shearCap * robustF) : Infinity;
+                /* กำลังต้านการลื่นไถลของทั้งระบบ (เสียดทานก้นฐาน + กำลังด้านข้างของเข็มทุกต้น) */
+                const P_grp_gov      = govPile ? govPile.P_grp : 0;
+                const H_fric_sys     = fricGov ? fricGov.H_fric_use : 0;
+                const R_slide_sys    = H_fric_sys + (N_piles * (shearCapValid ? shearCap : 0));
+                const util_slide_sys = R_slide_sys > 0 ? P_grp_gov / R_slide_sys : Infinity;
 
                 /* ค่าที่คงชื่อเดิมไว้เพื่อความเข้ากันได้กับส่วนแสดงผล */
                 const V_pile = govPile ? govPile.V_grp : 0;
@@ -1028,8 +1066,9 @@
                     B_eff, bearingMode, peakAt, bearingValid,
                     okOT, okSlide, okBear, okEcc,
                     W5_dry, W5_wet,
-                    N_piles, x_cg_pile, sum_d2, pile_results, V_shear_pile,
-                    shearCap, shearFromBroms, shearCapValid, shearRatio,
+                    N_piles, x_cg_pile, sum_d2, pile_results, V_shear_pile, V_shear_pile_n,
+                    shearCap, shearFromBroms, shearCapValid, shearRatio, shearRatioN,
+                    fricGov, H_fric_sys, R_slide_sys, util_slide_sys, P_grp_gov,
                     pc1, pc2, govPile, okPileComp, okPileTen, okPileShear,
                     ks_raft, Kp_raft, raftMode, robustF, raftGov, raftS, raftN,
                     okRaftSettle, okRaftQ, okRaftContact, okRaftSolve,
@@ -1785,7 +1824,9 @@
                                             cond={calc.okPileShear}
                                             tTrue={calc.shearCapValid ? `\u2264 ${calc.shearCap.toFixed(0)} ผ่าน` : 'ผ่าน'}
                                             tFalse={calc.shearCapValid ? `เกิน ${calc.shearRatio.toFixed(1)} เท่า` : 'ยังไม่ได้กำหนดกำลัง'}
-                                            note={calc.shearFromBroms ? 'กำลังจาก Broms ' + calc.shearCap.toFixed(0) + ' กก.' : 'กำลังจากค่าที่กรอกเอง'} />
+                                            note={(calc.raftMode && calc.fricGov && calc.fricGov.H_fric_use > 0
+                                                    ? 'เสียดทานก้นฐานช่วย ' + (100 * calc.fricGov.H_fric_use / Math.max(1, calc.fricGov.P_grp)).toFixed(0) + '% \u00B7 ทนทาน ' + calc.V_shear_pile_n.toFixed(0) + ' กก.'
+                                                    : (calc.shearFromBroms ? 'กำลังจาก Broms ' + calc.shearCap.toFixed(0) + ' กก.' : 'กำลังจากค่าที่กรอกเอง'))} />
                                         <StatCard label={<span>เยื้องศูนย์จาก CG เข็ม (e<Sub text="p"/>)</span>}
                                             value={e_p >= 0 ? e_p.toFixed(3) : e_p.toFixed(3)} unit="ม."
                                             cond={null}
@@ -2641,9 +2682,23 @@
                         <div className="mt-2 text-xs text-slate-500">
                             * ไม่คิดแรงดันดินด้านรับ (Passive) และไม่คิดแรงยึดเกาะ (cohesion) ที่ก้นฐาน &mdash; เป็นการคิดแบบปลอดภัย
                         </div>
-                        {pile.usePiles && pile.designMode === 'full' && (
-                            <div className="mt-2 text-indigo-600 text-sm">
-                                * เลือกสมมติฐาน Full Load แรงผลักด้านข้างทั้งหมดถูกส่งไปตรวจสอบเป็นแรงเฉือนในเสาเข็ม
+                        {pile.usePiles && (
+                            <div className="mt-3 p-3 bg-indigo-50 print:bg-transparent border border-indigo-200 rounded text-sm text-indigo-900 leading-snug print:break-inside-avoid">
+                                <strong>เมื่อใช้ฐานรากเสาเข็ม ค่า F.S. ข้างบนไม่ใช่กลไกที่ควบคุมการออกแบบ</strong> เพราะคิดจากสมมติว่าน้ำหนักทั้งหมดกดลงบนดิน
+                                {pile.designMode === 'full'
+                                    ? <span> โหมด Full Load สมมติว่าดินไม่รับแรงกดเลย จึงไม่มีแรงเสียดทานที่ก้นฐาน แรงผลักทั้งหมด {calc.P_grp_gov.toFixed(0)} กก./ช่วง ถูกส่งไปเป็นแรงเฉือนในเสาเข็ม</span>
+                                    : <span> โหมด Piled Raft ดินรับแรงกดจริง จึงมีแรงเสียดทานช่วย {calc.H_fric_sys.toFixed(0)} กก. และเสาเข็มรับส่วนที่เหลือ</span>}
+                                <div className="mt-2 pt-2 border-t border-indigo-200 grid grid-cols-1 sm:grid-cols-3 print:grid-cols-3 gap-2 text-xs">
+                                    <div>แรงผลักต่อช่วง: <strong>{calc.P_grp_gov.toFixed(0)}</strong> กก.</div>
+                                    <div>กำลังต้านรวม: <strong>{calc.R_slide_sys.toFixed(0)}</strong> กก.
+                                        <span className="text-indigo-600"> ({calc.H_fric_sys.toFixed(0)} เสียดทาน + {(calc.N_piles * (calc.shearCapValid ? calc.shearCap : 0)).toFixed(0)} เข็ม)</span></div>
+                                    <div>ใช้กำลัง: <strong className={calc.util_slide_sys <= 1 ? 'text-emerald-700' : 'text-rose-700'}>
+                                        {Number.isFinite(calc.util_slide_sys) ? (100 * calc.util_slide_sys).toFixed(0) + '%' : '-'}</strong>
+                                        {' '}{calc.util_slide_sys <= 1 ? '(ผ่าน)' : '(เกิน)'}</div>
+                                </div>
+                                <div className="mt-1 text-[11px] text-indigo-700">
+                                    ดูรายละเอียดการแบ่งแรงและการตรวจกำลังด้านข้างของเข็มในแท็บ &quot;แรงเสาเข็ม&quot;
+                                </div>
                             </div>
                         )}
                     </StepBox>
@@ -3025,13 +3080,63 @@
                                     </tbody>
                                 </table>
 
-                                <div className={`p-3 rounded-lg border-2 print:break-inside-avoid ${calc.okPileComp ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'}`}>
+                                {/* ═══ [PR-H] การแบ่งแรงในแนวราบ ═══ */}
+                                <div className="mb-4 p-3 rounded-lg border border-slate-200 bg-slate-50 print:bg-transparent print:break-inside-avoid">
+                                    <div className="font-bold text-sm mb-2 text-slate-700">การแบ่งแรงในแนวราบ (กรณีวิกฤต {calc.fricGov.label})</div>
+                                    <div className="text-xs text-slate-600 leading-snug mb-3">
+                                        เมื่อฐานสัมผัสดินและดินรับแรงกด F<Sub text="soil"/> อยู่จริง ก็ย่อมมีแรงเสียดทานที่ก้นฐานมาช่วยต้านการเลื่อน
+                                        แรงตั้งฉากที่ใช้คือ <strong>F<Sub text="soil"/> ไม่ใช่ &Sigma;V ทั้งก้อน</strong> เพราะส่วนที่ถ่ายลงเสาเข็มไม่ได้กดที่ก้นฐาน
+                                    </div>
+                                    <table className="w-full text-left border-collapse text-sm print:text-xs">
+                                        <tbody>
+                                            <tr className="border-b border-slate-200">
+                                                <td className="py-1.5">แรงผลักด้านข้าง ต่อ 1 ช่วงเสาเข็ม</td>
+                                                <td className="text-right font-semibold">{calc.fricGov.P_grp.toFixed(0)} กก.</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-200">
+                                                <td className="py-1.5">แรงกดที่ดินรับ F<Sub text="soil"/></td>
+                                                <td className="text-right">{calc.fricGov.Fs_soil.toFixed(0)} กก.</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-200">
+                                                <td className="py-1.5">แรงเสียดทานประลัย = f &times; F<Sub text="soil"/> = {calc.f_calc.toFixed(3)} &times; {calc.fricGov.Fs_soil.toFixed(0)}</td>
+                                                <td className="text-right">{calc.fricGov.H_fric_ult.toFixed(0)} กก.</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-200 text-emerald-700">
+                                                <td className="py-1.5">หาร F.S. ลื่นไถล {fsSlideReq.toFixed(2)} &rarr; แรงเสียดทานที่นำมาใช้ได้</td>
+                                                <td className="text-right font-bold">{calc.fricGov.H_fric_use.toFixed(0)} กก. ({(100 * calc.fricGov.H_fric_use / Math.max(1, calc.fricGov.P_grp)).toFixed(0)}%)</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-200 bg-white print:bg-transparent">
+                                                <td className="py-1.5 font-semibold">เสาเข็มรับส่วนที่เหลือ</td>
+                                                <td className="text-right font-bold text-indigo-700">{calc.fricGov.H_pile_d.toFixed(0)} กก. = {calc.V_shear_pile.toFixed(0)} กก./ต้น</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="py-1.5 text-slate-500">กรณีทนทาน ไม่มีแรงเสียดทาน เข็มรับทั้งหมด</td>
+                                                <td className="text-right text-slate-700">{calc.fricGov.H_pile_n.toFixed(0)} กก. = {calc.V_shear_pile_n.toFixed(0)} กก./ต้น</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <div className="mt-2 text-[11px] text-slate-500 leading-snug">
+                                        แนวราบต่างจากแนวดิ่ง: แรงเสียดทานทำงานเต็มที่ตั้งแต่เคลื่อน 2-5 มม. แล้วคงที่แบบพลาสติก
+                                        ส่วนเสาเข็มต้องเคลื่อน 6-12 มม. จึงถึงพิกัด ที่ระยะเคลื่อนตัวออกแบบ แรงเสียดทานจึงทำงานเต็มที่แล้ว
+                                        การนำมาบวกกันจึงมีเหตุผลรองรับ ต่างจากแนวดิ่งที่ดินยังทำงานไม่เต็มที่
+                                        &nbsp;|&nbsp; ยังไม่คิดแรงดันดินด้านรับ (Passive) หน้า Toe ซึ่งเป็นการคิดแบบปลอดภัย
+                                    </div>
+                                </div>
+
+                                <div className={`p-3 rounded-lg border-2 print:break-inside-avoid ${calc.okPileComp && calc.okPileShear ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'}`}>
                                     <div className="font-bold text-sm mb-2">กรณีตรวจความทนทาน &mdash; ถ้าดินหลุดจากใต้ฐาน (k<Sub text="s"/> = 0)</div>
                                     <div className="text-[13px] leading-snug text-slate-700">
                                         แรงในเข็มแถววิกฤตเพิ่มจาก <strong>{Math.max.apply(null, calc.pile_results.map(p => p.p_comp)).toFixed(0)}</strong> เป็น <strong>{Math.max.apply(null, calc.pile_results.map(p => p.n_comp)).toFixed(0)}</strong> กก.
                                         {' '}(เพิ่ม {(100 * (Math.max.apply(null, calc.pile_results.map(p => p.n_comp)) / Math.max(1, Math.max.apply(null, calc.pile_results.map(p => p.p_comp))) - 1)).toFixed(0)}%)
                                         {' '}เทียบกับพิกัดที่ยอมให้ในกรณีนี้ {(pile.allowComp * calc.robustF).toFixed(0)} กก.
                                         {' '}({calc.robustF > 1 ? 'พิกัดใช้งาน \u00D7 ' + calc.robustF.toFixed(2) : 'พิกัดใช้งาน'})
+                                    </div>
+                                    <div className="text-[13px] leading-snug text-slate-700 mt-1">
+                                        แรงเฉือนต่อเข็มเพิ่มจาก <strong>{calc.V_shear_pile.toFixed(0)}</strong> เป็น <strong>{calc.V_shear_pile_n.toFixed(0)}</strong> กก.
+                                        {' '}เทียบกับพิกัดที่ยอมให้ {(calc.shearCap * calc.robustF).toFixed(0)} กก.
+                                        {' '}{calc.V_shear_pile_n <= calc.shearCap * calc.robustF
+                                            ? <span className="text-emerald-700 font-bold">ผ่าน</span>
+                                            : <span className="text-rose-700 font-bold">ไม่ผ่าน</span>}
                                     </div>
                                     <div className="mt-2 text-xs text-slate-600 leading-relaxed border-t border-slate-300 pt-2">
                                         <strong>หลักการ:</strong> ให้ดินเป็นตัวช่วยเรื่องการใช้งาน (ลดการทรุดตัวและแรงในเข็ม)
@@ -3319,7 +3424,12 @@
                                     [<span>s<Sub text="limit"/></span>, 'ขีดจำกัดการทรุดตัวที่ยอมรับได้ ใช้ตรวจสอบผลลัพธ์'],
                                     ['ตัวคูณกำลัง กรณีดินไม่ช่วย', 'ตัวคูณพิกัดเสาเข็มที่ยอมให้ในกรณีตรวจความทนทาน ค่า 1.00 คือปลอดภัยที่สุด'],
                                     [<span>กรณี k<Sub text="s"/> = 0</span>, 'รันคู่กันเสมอ สมมติว่าดินหลุดจากใต้ฐาน ผลที่ได้จะเท่ากับโหมด Full Load พอดี'],
-                                    ['ยืนยันการสัมผัส', 'ต้องติ๊กยืนยันว่าฐานจะแตะดินตลอดอายุใช้งาน ไม่ติ๊กถือว่าไม่ผ่าน']
+                                    ['ยืนยันการสัมผัส', 'ต้องติ๊กยืนยันว่าฐานจะแตะดินตลอดอายุใช้งาน ไม่ติ๊กถือว่าไม่ผ่าน'],
+                                    [<span>f &times; F<Sub text="soil"/></span>, 'แรงเสียดทานประลัยที่ก้นฐาน ใช้แรงตั้งฉาก = F_soil เท่านั้น ไม่ใช่ \u03A3V ทั้งก้อน เพราะส่วนที่ถ่ายลงเข็มไม่ได้กดที่ก้นฐาน'],
+                                    ['แรงเสียดทานที่นำมาใช้ได้', 'f \u00D7 F_soil หารด้วย F.S. ลื่นไถล เพราะเป็นค่าประลัย ต่างจากกำลังด้านข้างของเข็มซึ่งเป็นค่าใช้งานอยู่แล้ว'],
+                                    ['แรงเฉือนต่อเข็ม กรณีออกแบบ', '(แรงผลัก - แรงเสียดทานที่ใช้ได้) \u00F7 จำนวนเข็ม'],
+                                    ['แรงเฉือนต่อเข็ม กรณีทนทาน', 'แรงผลักทั้งหมด \u00F7 จำนวนเข็ม สมมติว่าไม่มีแรงเสียดทานเลย ต้องผ่านด้วย'],
+                                    ['กำลังต้านลื่นไถลรวม', 'แรงเสียดทานที่ใช้ได้ + (กำลังด้านข้างของเข็ม \u00D7 จำนวนเข็ม) เป็นการตรวจลื่นไถลที่ถูกต้องสำหรับกำแพงบนเสาเข็ม']
                                 ]} />
 
                                 <GlossBlock title="12. กำลังรับแรงด้านข้างของเสาเข็ม (Broms)" wide
