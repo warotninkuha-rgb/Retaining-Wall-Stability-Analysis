@@ -448,8 +448,16 @@
                   J (ดุลพินิจของผู้พัฒนา ไม่ใช่ข้อกำหนดจากมาตรฐาน) พร้อมป้ายอ้างอิง
                   ฝังท้ายสูตร 25 จุด ชี้เมาส์ดูที่มาและข้อจำกัดได้
                 + ตรวจสมดุลโมเมนต์ของ Piled Raft เพิ่ม (ไม่เคยตรวจมาก่อน) ผ่านที่ 1e-4
+           v3.7 — แก้ป้ายอ้างอิงทับตัวหนังสือ: 7 จุดถูกวางหลังแท็กปิดทำให้หลุดออกนอก
+                  container (กรณี th เบราว์เซอร์ยกออกนอกตาราง) และเปลี่ยนจาก sup ที่มี
+                  padding ล้นกรอบบรรทัด เป็น inline-block align-middle leading-none
+                + ขั้นที่ 3 แสดงวิธีแก้สมการเต็ม 7 ข้อย่อย ตั้งแต่ประกาศตัวแปร ประกอบ
+                  เมทริกซ์ 2x2 ทีละสัมประสิทธิ์ จนถึงกฎของคราเมอร์และการวนซ้ำ
+                + ขั้นที่ 8 Broms เพิ่มบล็อกประกาศตัวแปรและคอลัมน์แทนค่าของทั้ง 3 กลไก
+                + ตารางแรงผลักและแรงต้าน เพิ่มบรรทัดแทนค่าใต้สูตรทุกแถว
+                  รูปแบบมาตรฐาน: ประกาศตัวแปร -> สมการ -> แทนค่า -> ผลลัพธ์
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v3.6 (ที่มาสมการครบ 37 รายการ)';
+        const APP_VERSION = 'v3.7 (แสดงวิธีคำนวณละเอียดทุกขั้น)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -758,7 +766,7 @@
                 const isFixed = lat.fixity === 'fixed';
                 const nHinge  = isFixed ? 2 : 1;
 
-                let k = 0, beta = 0, T = 0, charLen = 0;
+                let k = 0, beta = 0, T = 0, charLen = 0, quad = null;
                 let y_per_H = 0, M_per_H = 0, H_ult = 0, longOK = true, longCrit = '';
                 const cu_kPa = Math.max(0.1, lat.cu) * 9.80665;                     // ตัน/ม.2 -> kPa
 
@@ -773,6 +781,7 @@
                        n*M_y = H(1.5D + 0.5f) , f = H/(9 c_u D)  ->  aH^2 + bH - n*M_y = 0 */
                     const a = 1 / (18 * cu_kPa * D), b = 1.5 * D;
                     H_ult = (-b + Math.sqrt(b * b + 4 * a * nHinge * My)) / (2 * a);
+                    quad = { a: a, b: b, c: nHinge * My };
                     longOK = beta * lat.Lpile >= 2.5;
                     longCrit = '\u03B2L = ' + (beta * lat.Lpile).toFixed(2) + ' (ต้อง \u2265 2.5)';
                 } else {
@@ -790,6 +799,7 @@
                     const g_eff = (submerged ? 1100 : 1800) * 0.00980665;              // kN/m3
                     const denom = Math.sqrt(Math.max(1e-9, Kp * g_eff * D));
                     H_ult = Math.pow(nHinge * My * denom / 0.5467, 2 / 3);
+                    quad = { Kp: Kp, g_eff: g_eff, denom: denom, nh: nh };
                     longOK = lat.Lpile / T >= 4;
                     longCrit = 'L/T = ' + (lat.Lpile / T).toFixed(2) + ' (ต้อง \u2265 4)';
                 }
@@ -813,7 +823,7 @@
                 return {
                     I, Zs, Ec_MPa, EI, Mcr, My, isFixed, nHinge,
                     k, beta, T, charLen, y_per_H, M_per_H,
-                    H_defl, H_crack, H_ult, H_broms, modes, gov,
+                    H_defl, H_crack, H_ult, H_broms, modes, gov, quad, D, di,
                     pMult, H_allow, M_at_allow, longOK, longCrit, cu_kPa,
                     H_allow_kg: toKg(H_allow), Mcr_tm: Mcr / 9.80665, My_tm: My / 9.80665,
                     toKg
@@ -1016,7 +1026,9 @@
                     let SKp = 0, SKx = 0, SKx2 = 0;
                     pileRows.forEach(x => { SKp += Kp; SKx += Kp * x; SKx2 += Kp * x * x; });
                     let a = 0, b = (ks > 0 ? B : 0), w0 = 0, th = 0, conv = false;
+                    let steps = null, nIter = 0;
                     for (let it = 0; it < 40; it++) {
+                        nIter = it + 1;
                         const c0 = ks * pile.spacingL;
                         const S0 = c0 * (b - a);
                         const S1 = c0 * (b * b - a * a) / 2;
@@ -1026,6 +1038,8 @@
                         if (!(Math.abs(det) > 1e-9)) return null;
                         w0 = ((Vg * A22) - (A12 * Mg)) / det;
                         th = ((A11 * Mg) - (A12 * Vg)) / det;
+                        /* เก็บค่ากลางไว้แสดงวิธีคำนวณในรายงาน */
+                        steps = { c0, S0, S1, S2, SKp, SKx, SKx2, A11, A12, A22, det, a, b, Vg, Mg };
                         if (!(ks > 0)) { conv = true; break; }
                         let na = a, nb = b;
                         if (th < 0 && (w0 + th * b) < 0) nb = Math.max(a, Math.min(b, -w0 / th));
@@ -1040,7 +1054,7 @@
                     const rows = pileRows.map((x, i) => ({ id: i + 1, x, w: wAt(x), P: Kp * wAt(x) }));
                     const qA = (b > a) ? ks * wAt(a) : 0;
                     const qB = (b > a) ? ks * wAt(b) : 0;
-                    return { w0, th, a, b, conv, contact: B > 0 ? (b - a) / B : 0,
+                    return { w0, th, a, b, conv, steps, nIter, contact: B > 0 ? (b - a) / B : 0,
                              Fs, share: Vg > 0 ? Fs / Vg : 0, rows,
                              q_a: qA, q_b: qB, q_max: Math.max(qA, qB, 0),
                              w_max: Math.max(wAt(0), wAt(B)), wAt };
@@ -1484,11 +1498,11 @@
                                     </select>
                                     <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
                                         <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200">
-                                            <div className="text-slate-500">K&#8336;</div>
+                                            <div className="text-slate-500 leading-relaxed">K&#8336;</div>
                                             <div className="font-bold text-slate-700">{calc.K_active.toFixed(3)}</div>
                                         </div>
                                         <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200">
-                                            <div className="text-slate-500">K&#8320;</div>
+                                            <div className="text-slate-500 leading-relaxed">K&#8320;</div>
                                             <div className="font-bold text-slate-700">{calc.K_rest.toFixed(3)}</div>
                                         </div>
                                         <div className="bg-rose-50 print:bg-transparent p-2 rounded border border-rose-200">
@@ -1528,11 +1542,11 @@
                                     </select>
                                     <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
                                         <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200">
-                                            <div className="text-slate-500">u ที่ Toe</div>
+                                            <div className="text-slate-500 leading-relaxed">u ที่ Toe</div>
                                             <div className="font-bold text-slate-700">{calc.u_toe.toFixed(0)}</div>
                                         </div>
                                         <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200">
-                                            <div className="text-slate-500">u ที่ Heel</div>
+                                            <div className="text-slate-500 leading-relaxed">u ที่ Heel</div>
                                             <div className="font-bold text-slate-700">{calc.u_heel.toFixed(0)}</div>
                                         </div>
                                         <div className="bg-rose-50 print:bg-transparent p-2 rounded border border-rose-200">
@@ -2404,35 +2418,35 @@
                                 <tbody>
                                     <tr className="border-b border-slate-100">
                                         <td className="py-2">P<Sub text="1"/> (Surcharge)</td>
-                                        <td>p1 &times; (H+T1) &times; L</td>
+                                        <td>p1 &times; (H+T1) &times; L<div className="text-[10px] text-slate-400 font-mono">{calc.p1.toFixed(1)} &times; {calc.H_tot.toFixed(2)} &times; {calc.L}</div></td>
                                         <td>{calc.P1.toFixed(2)}</td>
                                         <td>{calc.y1.toFixed(2)}</td>
                                         <td>{(calc.P1 * calc.y1).toFixed(2)}</td>
                                     </tr>
                                     <tr className="border-b border-slate-100">
                                         <td className="py-2">P<Sub text="2"/> (ดินแห้ง-สามเหลี่ยม)</td>
-                                        <td>&frac12; &times; p2 &times; h<Sub text="dry"/> &times; L</td>
+                                        <td>&frac12; &times; p2 &times; h<Sub text="dry"/> &times; L<div className="text-[10px] text-slate-400 font-mono">0.5 &times; {calc.p2.toFixed(1)} &times; {calc.h_dry.toFixed(2)} &times; {calc.L}</div></td>
                                         <td>{calc.P2_tri.toFixed(2)}</td>
                                         <td>{calc.y2_tri.toFixed(2)}</td>
                                         <td>{(calc.P2_tri * calc.y2_tri).toFixed(2)}</td>
                                     </tr>
                                     <tr className="border-b border-slate-100">
                                         <td className="py-2">P<Sub text="2"/> (ดินแห้ง-สี่เหลี่ยม)</td>
-                                        <td>p2 &times; h<Sub text="w"/> &times; L</td>
+                                        <td>p2 &times; h<Sub text="w"/> &times; L<div className="text-[10px] text-slate-400 font-mono">{calc.p2.toFixed(1)} &times; {calc.h_w.toFixed(2)} &times; {calc.L}</div></td>
                                         <td>{calc.P2_rect.toFixed(2)}</td>
                                         <td>{calc.y2_rect.toFixed(2)}</td>
                                         <td>{(calc.P2_rect * calc.y2_rect).toFixed(2)}</td>
                                     </tr>
                                     <tr className="border-b border-slate-100">
                                         <td className="py-2">P<Sub text="3"/> (ดินจมน้ำ)</td>
-                                        <td>&frac12; &times; p3 &times; h<Sub text="w"/> &times; L</td>
+                                        <td>&frac12; &times; p3 &times; h<Sub text="w"/> &times; L<div className="text-[10px] text-slate-400 font-mono">0.5 &times; {calc.p3.toFixed(1)} &times; {calc.h_w.toFixed(2)} &times; {calc.L}</div></td>
                                         <td>{calc.P3.toFixed(2)}</td>
                                         <td>{calc.y3.toFixed(2)}</td>
                                         <td>{(calc.P3 * calc.y3).toFixed(2)}</td>
                                     </tr>
                                     <tr className="border-b border-slate-200">
                                         <td className="py-2">P<Sub text="4"/> (น้ำ)</td>
-                                        <td>&frac12; &times; p4 &times; h<Sub text="w"/> &times; L</td>
+                                        <td>&frac12; &times; p4 &times; h<Sub text="w"/> &times; L<div className="text-[10px] text-slate-400 font-mono">0.5 &times; {calc.p4.toFixed(1)} &times; {calc.h_w.toFixed(2)} &times; {calc.L}</div></td>
                                         <td>{calc.P4.toFixed(2)}</td>
                                         <td>{calc.y4.toFixed(2)}</td>
                                         <td>{(calc.P4 * calc.y4).toFixed(2)}</td>
@@ -2617,28 +2631,28 @@
                                     <tbody>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#94a3b8] mr-2 border border-[#475569]"></span>W<Sub text="1"/>: ฐานรากส่วน Toe</td>
-                                            <td>C &times; T1 &times; &gamma;<Sub text="c"/> &times; L</td>
+                                            <td>C &times; T1 &times; &gamma;<Sub text="c"/> &times; L<div className="text-[10px] text-slate-400 font-mono">{geom.C} &times; {geom.T1} &times; {gamma_conc} &times; {calc.L}</div></td>
                                             <td>{calc.w1.toFixed(2)}</td>
                                             <td>{calc.x1.toFixed(2)}</td>
                                             <td>{(calc.w1 * calc.x1).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#e2e8f0] mr-2 border border-[#475569]"></span>W<Sub text="2"/>: กำแพงส่วนสี่เหลี่ยม</td>
-                                            <td>G &times; H &times; &gamma;<Sub text="c"/> &times; L</td>
+                                            <td>G &times; H &times; &gamma;<Sub text="c"/> &times; L<div className="text-[10px] text-slate-400 font-mono">{geom.G} &times; {geom.H} &times; {gamma_conc} &times; {calc.L}</div></td>
                                             <td>{calc.w2.toFixed(2)}</td>
                                             <td>{calc.x2.toFixed(2)}</td>
                                             <td>{(calc.w2 * calc.x2).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#f1f5f9] mr-2 border border-[#475569]"></span>W<Sub text="3"/>: กำแพงส่วนสามเหลี่ยม</td>
-                                            <td>&frac12; &times; m &times; H &times; &gamma;<Sub text="c"/> &times; L</td>
+                                            <td>&frac12; &times; m &times; H &times; &gamma;<Sub text="c"/> &times; L<div className="text-[10px] text-slate-400 font-mono">0.5 &times; {calc.m.toFixed(3)} &times; {geom.H} &times; {gamma_conc} &times; {calc.L}</div></td>
                                             <td>{calc.w3.toFixed(2)}</td>
                                             <td>{calc.x3.toFixed(2)}</td>
                                             <td>{(calc.w3 * calc.x3).toFixed(2)}</td>
                                         </tr>
                                         <tr className="border-b border-slate-100">
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#cbd5e1] mr-2 border border-[#475569]"></span>W<Sub text="4"/>: ฐานรากส่วน Stem+Heel</td>
-                                            <td>(D + F) &times; T1 &times; &gamma;<Sub text="c"/> &times; L</td>
+                                            <td>(D + F) &times; T1 &times; &gamma;<Sub text="c"/> &times; L<div className="text-[10px] text-slate-400 font-mono">({geom.D} + {geom.F}) &times; {geom.T1} &times; {gamma_conc} &times; {calc.L}</div></td>
                                             <td>{calc.w4.toFixed(2)}</td>
                                             <td>{calc.x4.toFixed(2)}</td>
                                             <td>{(calc.w4 * calc.x4).toFixed(2)}</td>
@@ -2680,7 +2694,7 @@
                                         {/* ═══ [C1] แรงดันน้ำยกใต้ฐานราก ═══ */}
                                         <tr className={`border-b border-slate-200 ${calc.U > 0 ? 'bg-rose-50' : 'opacity-50'}`}>
                                             <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#bae6fd] mr-2 border border-[#0284c7]"></span>U: แรงดันน้ำยกใต้ฐาน<Ref id="R8"/> <span className="text-rose-600 font-bold">(ลบ)</span></td>
-                                            <td>&frac12; &times; (u<Sub text="toe"/> + u<Sub text="heel"/>) &times; B &times; L</td>
+                                            <td>&frac12; &times; (u<Sub text="toe"/> + u<Sub text="heel"/>) &times; B &times; L<div className="text-[10px] text-slate-400 font-mono">0.5 &times; ({calc.u_toe.toFixed(1)} + {calc.u_heel.toFixed(1)}) &times; {calc.B.toFixed(2)} &times; {calc.L}</div></td>
                                             <td className="text-rose-600">{calc.U > 0 ? '-' : ''}{calc.U.toFixed(2)}</td>
                                             <td>{calc.x_U.toFixed(2)}</td>
                                             <td className="text-rose-600">{calc.M_U > 0 ? '-' : ''}{calc.M_U.toFixed(2)}</td>
@@ -2916,7 +2930,7 @@
                                         <div className="flex items-center flex-wrap gap-x-2 mb-2 text-rose-700 font-semibold">
                                             <span>q<Sub text="max"/> =</span>
                                             <Fraction top={<span>&Sigma;V - U</span>} bottom={<span>B &times; L</span>} />
-                                            <span>&times; (1 +</span><Ref id="R12"/>
+                                            <span>&times; (1 +<Ref id="R12"/></span>
                                             <Fraction top={<span>6|e|</span>} bottom={<span>B</span>} />
                                             <span>)</span>
                                         </div>
@@ -3105,7 +3119,7 @@
                                     </div>
                                     <div className="bg-white print:bg-transparent p-3 rounded border border-slate-200">
                                         <div className="font-semibold text-slate-700 border-b pb-1 mb-2">เสาเข็ม 1 ต้น</div>
-                                        <div className="text-slate-600">K<Sub text="pile"/> = P<Sub text="ใช้งาน"/> &divide; s<Sub text="pile"/></div><Ref id="R18"/>
+                                        <div className="text-slate-600">K<Sub text="pile"/> = P<Sub text="ใช้งาน"/> &divide; s<Sub text="pile"/><Ref id="R18"/></div>
                                         <div className="text-slate-600">= {pile.allowComp} &divide; {(raft.sPile / 1000).toFixed(4)} ม.</div>
                                         <div className="font-bold text-indigo-700 mt-1">= {calc.Kp_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })} กก./ม.</div>
                                     </div>
@@ -3150,34 +3164,111 @@
                         {/* ═══════════ ขั้นที่ 3 ═══════════ */}
                         {calc.raftMode && calc.raftS ? (
                             <StepBox title="ขั้นที่ 3 — แก้สมการความเข้ากันได้ของการเคลื่อนตัว">
-                                <div className="text-xs bg-slate-100 print:bg-transparent border border-slate-200 rounded p-2 mb-3 leading-snug font-mono">
-                                    w(x) = w<Sub text="0"/> + &theta;&middot;x &nbsp;&nbsp;|&nbsp;&nbsp;
-                                    V = k<Sub text="s"/>&middot;S<Sub text="L"/>&middot;&int;w dx + &Sigma;(K<Sub text="p"/>&middot;w(x<Sub text="i"/>)) &nbsp;&nbsp;|&nbsp;&nbsp;
-                                    M = k<Sub text="s"/>&middot;S<Sub text="L"/>&middot;&int;w&middot;x dx + &Sigma;(K<Sub text="p"/>&middot;w(x<Sub text="i"/>)&middot;x<Sub text="i"/>)<Ref id="R17"/>
-                                </div>
-                                <div className="text-xs text-slate-600 mb-3 leading-snug">
-                                    ระบบสมการ 2 ตัวแปร 2 สมการ แก้แล้ววนซ้ำตัดช่วงที่ w ติดลบออก เพราะดินรับแรงดึงไม่ได้
-                                    &nbsp;ผลลัพธ์ของกรณีวิกฤต ({calc.raftGov.label}):
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-3 text-sm">
-                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-xs text-slate-500">w<Sub text="0"/> (ที่ Toe)</div>
-                                        <div className="font-bold">{(calc.raftS.wAt(0) * 1000).toFixed(3)} มม.</div>
-                                    </div>
-                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-xs text-slate-500">w ที่ Heel</div>
-                                        <div className="font-bold">{(calc.raftS.wAt(calc.B) * 1000).toFixed(3)} มม.</div>
-                                    </div>
-                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-xs text-slate-500">&theta;</div>
-                                        <div className="font-bold">{Math.abs(calc.raftS.th) > 1e-9 ? '1/' + Math.round(1 / Math.abs(calc.raftS.th)).toLocaleString() : '0'}</div>
-                                    </div>
-                                    <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-xs text-slate-500">ดินสัมผัสฐาน</div>
-                                        <div className="font-bold">{(100 * calc.raftS.contact).toFixed(0)}%</div>
-                                        <div className="text-[10px] text-slate-400">x = {calc.raftS.a.toFixed(2)}-{calc.raftS.b.toFixed(2)} ม.</div>
-                                    </div>
-                                </div>
+                                {(() => {
+                                    const S = calc.raftS, st = S.steps;
+                                    if (!st) return <div className="text-rose-600">ไม่มีข้อมูลขั้นตอนการแก้สมการ</div>;
+                                    const f6 = (v) => Number.isFinite(v) ? v.toFixed(6) : '-';
+                                    return (
+                                        <div>
+                                            <CalcBlock title="3.1 ประกาศตัวแปร">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-x-6 text-xs text-slate-600">
+                                                    <div className="py-0.5">w(x) = การทรุดตัวของฐานที่ตำแหน่ง x (ม.)</div>
+                                                    <div className="py-0.5">w<Sub text="0"/> = การทรุดตัวที่ Toe &mdash; <strong>ตัวไม่ทราบค่าที่ 1</strong></div>
+                                                    <div className="py-0.5">&theta; = การหมุนของฐานราก (rad) &mdash; <strong>ตัวไม่ทราบค่าที่ 2</strong></div>
+                                                    <div className="py-0.5">k<Sub text="s"/> = {num(calc.ks_raft)} กก./ม.&sup3; (จากขั้นที่ 2)</div>
+                                                    <div className="py-0.5">K<Sub text="p"/> = {num(calc.Kp_raft)} กก./ม. ต่อเข็ม 1 ต้น (จากขั้นที่ 2)</div>
+                                                    <div className="py-0.5">S<Sub text="L"/> = {pile.spacingL} ม. &nbsp;|&nbsp; B = {calc.B.toFixed(2)} ม. &nbsp;|&nbsp; N = {calc.N_piles} ต้น</div>
+                                                    <div className="py-0.5">x<Sub text="i"/> = {pileRows.map(x => x.toFixed(2)).join(', ')} ม. (ตำแหน่งเสาเข็ม)</div>
+                                                    <div className="py-0.5">V = {num(st.Vg, 1)} กก. &nbsp;|&nbsp; M<Sub text="toe"/> = {num(st.Mg, 1)} กก.-ม. (จากขั้นที่ 1)</div>
+                                                </div>
+                                            </CalcBlock>
+
+                                            <CalcBlock title="3.2 กำหนดสมการ">
+                                                <div className="font-mono text-xs text-slate-700 space-y-1">
+                                                    <div>w(x) = w<Sub text="0"/> + &theta;&middot;x &nbsp; (ฐานรากแกร่ง การทรุดตัวจึงเป็นเส้นตรง)</div>
+                                                    <div>สมดุลแรง: k<Sub text="s"/>&middot;S<Sub text="L"/>&middot;&int;<Sub text="a..b"/> w dx + &Sigma; K<Sub text="p"/>&middot;w(x<Sub text="i"/>) = V<Ref id="R17"/></div>
+                                                    <div>สมดุลโมเมนต์รอบ Toe: k<Sub text="s"/>&middot;S<Sub text="L"/>&middot;&int;<Sub text="a..b"/> w&middot;x dx + &Sigma; K<Sub text="p"/>&middot;w(x<Sub text="i"/>)&middot;x<Sub text="i"/> = M</div>
+                                                    <div className="pt-1 border-t border-slate-200">จัดรูปได้ระบบเชิงเส้น 2&times;2:</div>
+                                                    <div>&nbsp;&nbsp;A<Sub text="11"/>&middot;w<Sub text="0"/> + A<Sub text="12"/>&middot;&theta; = V</div>
+                                                    <div>&nbsp;&nbsp;A<Sub text="12"/>&middot;w<Sub text="0"/> + A<Sub text="22"/>&middot;&theta; = M</div>
+                                                </div>
+                                            </CalcBlock>
+
+                                            <CalcBlock title="3.3 แทนค่าหาสัมประสิทธิ์ — ส่วนของดิน">
+                                                <CalcLine label={<span>S<Sub text="0"/></span>}
+                                                    eq={<span>k<Sub text="s"/> &times; S<Sub text="L"/> &times; (b - a)</span>}
+                                                    sub={`${num(calc.ks_raft)} × ${pile.spacingL} × (${st.b.toFixed(3)} − ${st.a.toFixed(3)})`}
+                                                    result={num(st.S0, 0)} />
+                                                <CalcLine label={<span>S<Sub text="1"/></span>}
+                                                    eq={<span>k<Sub text="s"/> &times; S<Sub text="L"/> &times; (b&sup2; - a&sup2;) / 2</span>}
+                                                    sub={`${num(calc.ks_raft)} × ${pile.spacingL} × (${(st.b * st.b).toFixed(4)} − ${(st.a * st.a).toFixed(4)}) / 2`}
+                                                    result={num(st.S1, 0)} />
+                                                <CalcLine label={<span>S<Sub text="2"/></span>}
+                                                    eq={<span>k<Sub text="s"/> &times; S<Sub text="L"/> &times; (b&sup3; - a&sup3;) / 3</span>}
+                                                    sub={`${num(calc.ks_raft)} × ${pile.spacingL} × (${(st.b * st.b * st.b).toFixed(4)} − ${(st.a * st.a * st.a).toFixed(4)}) / 3`}
+                                                    result={num(st.S2, 0)} />
+                                            </CalcBlock>
+
+                                            <CalcBlock title="3.4 แทนค่าหาสัมประสิทธิ์ — ส่วนของเสาเข็ม">
+                                                <CalcLine label={<span>&Sigma;K<Sub text="p"/></span>}
+                                                    eq={<span>N &times; K<Sub text="p"/></span>}
+                                                    sub={`${calc.N_piles} × ${num(calc.Kp_raft)}`}
+                                                    result={num(st.SKp, 0)} />
+                                                <CalcLine label={<span>&Sigma;K<Sub text="p"/>&middot;x<Sub text="i"/></span>}
+                                                    eq={<span>K<Sub text="p"/> &times; &Sigma;x<Sub text="i"/></span>}
+                                                    sub={`${num(calc.Kp_raft)} × (${pileRows.map(x => x.toFixed(2)).join(' + ')})`}
+                                                    result={num(st.SKx, 0)} />
+                                                <CalcLine label={<span>&Sigma;K<Sub text="p"/>&middot;x<Sub text="i"/>&sup2;</span>}
+                                                    eq={<span>K<Sub text="p"/> &times; &Sigma;x<Sub text="i"/>&sup2;</span>}
+                                                    sub={`${num(calc.Kp_raft)} × (${pileRows.map(x => (x * x).toFixed(3)).join(' + ')})`}
+                                                    result={num(st.SKx2, 0)} />
+                                            </CalcBlock>
+
+                                            <CalcBlock title="3.5 ประกอบเมทริกซ์สัมประสิทธิ์">
+                                                <CalcLine label={<span>A<Sub text="11"/></span>} eq={<span>S<Sub text="0"/> + &Sigma;K<Sub text="p"/></span>}
+                                                    sub={`${num(st.S0)} + ${num(st.SKp)}`} result={num(st.A11, 0)} />
+                                                <CalcLine label={<span>A<Sub text="12"/></span>} eq={<span>S<Sub text="1"/> + &Sigma;K<Sub text="p"/>&middot;x<Sub text="i"/></span>}
+                                                    sub={`${num(st.S1)} + ${num(st.SKx)}`} result={num(st.A12, 0)} />
+                                                <CalcLine label={<span>A<Sub text="22"/></span>} eq={<span>S<Sub text="2"/> + &Sigma;K<Sub text="p"/>&middot;x<Sub text="i"/>&sup2;</span>}
+                                                    sub={`${num(st.S2)} + ${num(st.SKx2)}`} result={num(st.A22, 0)} />
+                                            </CalcBlock>
+
+                                            <CalcBlock title="3.6 แก้ระบบสมการด้วยกฎของคราเมอร์" tone="result">
+                                                <CalcLine label="det"
+                                                    eq={<span>A<Sub text="11"/>&middot;A<Sub text="22"/> - A<Sub text="12"/>&sup2;</span>}
+                                                    sub={`(${num(st.A11)} × ${num(st.A22)}) − ${num(st.A12)}²`}
+                                                    result={st.det.toExponential(4)} />
+                                                <CalcLine label={<span>w<Sub text="0"/></span>}
+                                                    eq={<span>(V&middot;A<Sub text="22"/> - A<Sub text="12"/>&middot;M) / det</span>}
+                                                    sub={`(${num(st.Vg, 1)} × ${num(st.A22)} − ${num(st.A12)} × ${num(st.Mg, 1)}) ÷ ${st.det.toExponential(4)}`}
+                                                    result={f6(S.w0)} unit="ม." note={`= ${(S.w0 * 1000).toFixed(4)} มม. (การทรุดตัวที่ Toe)`} />
+                                                <CalcLine label={<span>&theta;</span>}
+                                                    eq={<span>(A<Sub text="11"/>&middot;M - A<Sub text="12"/>&middot;V) / det</span>}
+                                                    sub={`(${num(st.A11)} × ${num(st.Mg, 1)} − ${num(st.A12)} × ${num(st.Vg, 1)}) ÷ ${st.det.toExponential(4)}`}
+                                                    result={S.th.toExponential(4)} unit="rad"
+                                                    note={Math.abs(S.th) > 1e-12 ? `= 1/${Math.round(1 / Math.abs(S.th)).toLocaleString()} ${S.th < 0 ? '(ทรุดมากที่ Toe)' : '(ทรุดมากที่ Heel)'}` : ''} />
+                                            </CalcBlock>
+
+                                            <CalcBlock title="3.7 ตรวจเงื่อนไขดินรับแรงดึงไม่ได้">
+                                                <CalcLine label="w ที่ x = 0"
+                                                    eq={<span>w<Sub text="0"/> + &theta;&middot;0</span>}
+                                                    sub={`${f6(S.w0)} + (${S.th.toExponential(3)} × 0)`}
+                                                    result={(S.wAt(0) * 1000).toFixed(4)} unit="มม." />
+                                                <CalcLine label={`w ที่ x = ${calc.B.toFixed(2)}`}
+                                                    eq={<span>w<Sub text="0"/> + &theta;&middot;B</span>}
+                                                    sub={`${f6(S.w0)} + (${S.th.toExponential(3)} × ${calc.B.toFixed(2)})`}
+                                                    result={(S.wAt(calc.B) * 1000).toFixed(4)} unit="มม." />
+                                                <div className={`mt-2 p-2 rounded text-xs leading-snug ${S.contact >= 0.999 ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-amber-50 text-amber-900 border border-amber-200'} print:bg-transparent`}>
+                                                    {S.contact >= 0.999
+                                                        ? <span>w เป็นบวกทั้งสองขอบ &rarr; <strong>ดินสัมผัสฐานเต็มความกว้าง</strong> ไม่ต้องวนซ้ำ (แก้สมการ {S.nIter} รอบ)</span>
+                                                        : <span>w ติดลบที่ขอบด้านหนึ่ง &rarr; ตัดช่วงที่ดินต้องรับแรงดึงออก แล้วแก้สมการใหม่
+                                                            <strong> วนซ้ำ {S.nIter} รอบ</strong> จนได้ช่วงสัมผัส x = {S.a.toFixed(3)} ถึง {S.b.toFixed(3)} ม.
+                                                            ({(100 * S.contact).toFixed(0)}% ของ B)</span>}
+                                                </div>
+                                            </CalcBlock>
+                                        </div>
+                                    );
+                                })()}
                             </StepBox>
                         ) : (
                             <StepBox title="ขั้นที่ 3 — สูตรกระจายแรง (Elastic Center)">
@@ -3602,21 +3693,39 @@
                                     ความยาวเข็มที่เกินจากนี้แทบไม่ช่วยเพิ่มกำลังด้านข้าง จึงต้องใช้ค่าดินของชั้นบนสุด ไม่ใช่ค่าเฉลี่ยตลอดความลึก
                                 </div>
 
+                                <CalcBlock title="ประกาศตัวแปรและคุณสมบัติหน้าตัด">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-x-6 text-xs text-slate-600">
+                                        <div className="py-0.5">D = {lat.D.toFixed(3)} ม. {lat.shape === 'circle' ? `(กลม รูใน ${lat.di.toFixed(3)} ม.)` : '(สี่เหลี่ยมตัน)'}</div>
+                                        <div className="py-0.5">I = {lateral.I.toExponential(4)} ม.⁴ &nbsp;|&nbsp; Z = {lateral.Zs.toExponential(4)} ม.&sup3;</div>
+                                        <div className="py-0.5">f&apos;<Sub text="c"/> = {lat.fcPile} ksc &rarr; E<Sub text="c"/> = 4700&radic;f&apos;c = {lateral.Ec_MPa.toFixed(0)} MPa<Ref id="R29"/></div>
+                                        <div className="py-0.5">EI = {lat.eiFactor} &times; E<Sub text="c"/> &times; I = {lateral.EI.toFixed(0)} kN&middot;ม.&sup2;</div>
+                                        <div className="py-0.5">M<Sub text="cr"/> = (f<Sub text="r"/> + f<Sub text="pe"/>) &times; Z = {lateral.Mcr.toFixed(1)} kN&middot;ม.<Ref id="R31"/></div>
+                                        <div className="py-0.5">M<Sub text="u"/> = {lat.muFactor} &times; M<Sub text="cr"/> = {lateral.My.toFixed(1)} kN&middot;ม.</div>
+                                        {lat.soilType === 'clay'
+                                            ? <div className="py-0.5">c<Sub text="u"/> = {lat.cu} ต./ม.&sup2; = {lateral.cu_kPa.toFixed(1)} kPa &rarr; k = 67c<Sub text="u"/> = {lateral.k.toFixed(0)} kN/ม.&sup2;<Ref id="R23"/></div>
+                                            : <div className="py-0.5">n<Sub text="h"/> = {lateral.quad ? lateral.quad.nh : '-'} kN/ม.&sup3; (ทราย{lat.sandDensity === 'loose' ? 'หลวม' : lat.sandDensity === 'dense' ? 'แน่น' : 'ปานกลาง'})<Ref id="R25"/></div>}
+                                        <div className="py-0.5">{lat.soilType === 'clay'
+                                            ? <span>&beta; = (k / 4EI)^0.25 = {lateral.beta.toFixed(4)} 1/ม. &rarr; 1/&beta; = {lateral.charLen.toFixed(2)} ม.<Ref id="R20"/></span>
+                                            : <span>T = (EI / n<Sub text="h"/>)^0.2 = {lateral.T.toFixed(3)} ม.<Ref id="R24"/></span>}</div>
+                                        <div className="py-0.5">การยึดหัวเข็ม: <strong>{lateral.isFixed ? 'ยึดแน่น' : 'หมุนได้'}</strong> &rarr; จำนวนจุดคราก n = {lateral.nHinge}</div>
+                                    </div>
+                                </CalcBlock>
+
                                 <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3 mb-4 text-xs">
                                     <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-slate-500">EI (แตกร้าว)</div><Ref id="R29"/>
+                                        <div className="text-slate-500 leading-relaxed">EI (แตกร้าว)<Ref id="R29"/></div>
                                         <div className="font-bold text-slate-700">{lateral.EI.toFixed(0)} kN·m²</div>
                                     </div>
                                     <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-slate-500">M<Sub text="cr"/> / M<Sub text="u"/></div><Ref id="R31"/>
+                                        <div className="text-slate-500 leading-relaxed">M<Sub text="cr"/> / M<Sub text="u"/><Ref id="R31"/></div>
                                         <div className="font-bold text-slate-700">{lateral.Mcr_tm.toFixed(2)} / {lateral.My_tm.toFixed(2)} ต.·ม.</div>
                                     </div>
                                     <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-slate-500">{lat.soilType === 'clay' ? 'k = 67c_u' : 'n_h'}</div><Ref id="R23"/>
+                                        <div className="text-slate-500 leading-relaxed">{lat.soilType === 'clay' ? 'k = 67c_u' : 'n_h'}<Ref id="R23"/></div>
                                         <div className="font-bold text-slate-700">{lat.soilType === 'clay' ? lateral.k.toFixed(0) + ' kN/m²' : 'T = ' + lateral.T.toFixed(2) + ' ม.'}</div>
                                     </div>
                                     <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-slate-500">ระยะยาวลักษณะ</div><Ref id="R20"/>
+                                        <div className="text-slate-500 leading-relaxed">ระยะยาวลักษณะ<Ref id="R20"/></div>
                                         <div className="font-bold text-slate-700">{lateral.charLen.toFixed(2)} ม.</div>
                                     </div>
                                 </div>
@@ -3625,9 +3734,10 @@
                                     <thead>
                                         <tr className="border-b border-slate-300 text-slate-600">
                                             <th className="py-2">กลไกที่ตรวจ</th>
-                                            <th>สมการ</th><Ref id="R21"/>
-                                            <th>H (กก.)</th>
-                                            <th>H (ตัน)</th>
+                                            <th>สมการ<Ref id="R21"/></th>
+                                            <th>แทนค่า (หน่วย kN, m)</th>
+                                            <th className="text-right">H (กก.)</th>
+                                            <th className="text-right">H (ตัน)</th>
                                             <th>สถานะ</th>
                                         </tr>
                                     </thead>
@@ -3646,8 +3756,15 @@
                                                         ? `${lateral.nHinge}M_y = H(1.5D + 0.5f)`
                                                         : `${lateral.nHinge}M_y = 0.67Hf`)}
                                                 </td>
-                                                <td>{lateral.toKg(m.H).toFixed(0)}</td>
-                                                <td>{(lateral.toKg(m.H) / 1000).toFixed(2)}</td>
+                                                <td className="text-[11px] text-slate-500 font-mono">
+                                                    {m.key === 'defl' && `${(lat.yLimit / 1000).toFixed(4)} ÷ ${lateral.y_per_H.toExponential(3)} = ${m.H.toFixed(1)} kN`}
+                                                    {m.key === 'crack' && `${lateral.Mcr.toFixed(1)} ÷ ${lateral.M_per_H.toExponential(3)} = ${m.H.toFixed(1)} kN`}
+                                                    {m.key === 'broms' && lateral.quad && (lat.soilType === 'clay'
+                                                        ? `a=${lateral.quad.a.toExponential(3)} b=${lateral.quad.b.toFixed(3)} c=${lateral.quad.c.toFixed(1)} → H_ult=${lateral.H_ult.toFixed(1)} ÷ ${lat.fsBroms}`
+                                                        : `Kp=${lateral.quad.Kp.toFixed(2)} γ'=${lateral.quad.g_eff.toFixed(2)} → H_ult=${lateral.H_ult.toFixed(1)} ÷ ${lat.fsBroms}`)}
+                                                </td>
+                                                <td className="text-right">{lateral.toKg(m.H).toFixed(0)}</td>
+                                                <td className="text-right">{(lateral.toKg(m.H) / 1000).toFixed(2)}</td>
                                                 <td>{m === lateral.gov ? <span className="text-amber-700">← คุมค่า</span> : ''}</td>
                                             </tr>
                                         ))}
@@ -3655,8 +3772,11 @@
                                             <td className="py-2" colSpan="2">
                                                 ใช้ได้ต่อต้น {lateral.pMult < 1 && <span className="font-normal text-xs">(คูณ p-multiplier {lateral.pMult})</span>}
                                             </td>
-                                            <td className="text-cyan-700">{lateral.H_allow_kg.toFixed(0)}</td>
-                                            <td className="text-cyan-700">{(lateral.H_allow_kg / 1000).toFixed(2)}</td>
+                                            <td className="text-[11px] font-normal text-slate-500 font-mono">
+                                                {lateral.toKg(lateral.gov.H).toFixed(0)} × {lateral.pMult.toFixed(2)}
+                                            </td>
+                                            <td className="text-right text-cyan-700">{lateral.H_allow_kg.toFixed(0)}</td>
+                                            <td className="text-right text-cyan-700">{(lateral.H_allow_kg / 1000).toFixed(2)}</td>
                                             <td></td>
                                         </tr>
                                     </tbody>
@@ -3692,14 +3812,46 @@
                 );
             };
 
+            /* ═══ แสดงวิธีคำนวณตามลำดับ: ประกาศตัวแปร -> สมการ -> แทนค่า -> ผลลัพธ์ ═══ */
+            const CalcLine = ({ label, eq, sub, result, unit, refId, note }) => (
+                <div className="border-b border-slate-100 py-2 last:border-0">
+                    <div className="flex flex-col sm:flex-row sm:items-baseline gap-x-3">
+                        <div className="text-slate-700 font-semibold text-sm min-w-[10rem] shrink-0">
+                            {label}{refId && <Ref id={refId} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            {eq && <div className="font-mono text-xs text-slate-600 break-words">{eq}</div>}
+                            {sub && <div className="font-mono text-xs text-slate-500 break-words">= {sub}</div>}
+                        </div>
+                        <div className="font-bold text-slate-800 text-sm whitespace-nowrap sm:text-right">
+                            = {result}{unit && <span className="font-normal text-slate-500 text-xs ml-1">{unit}</span>}
+                        </div>
+                    </div>
+                    {note && <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">{note}</div>}
+                </div>
+            );
+
+            /* บล็อกย่อยของวิธีคำนวณ */
+            const CalcBlock = ({ title, children, tone }) => (
+                <div className={`rounded-lg border p-3 mb-3 ${tone === 'result' ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'} print:bg-transparent`}>
+                    <div className="text-xs font-bold text-slate-600 uppercase tracking-wide mb-1">{title}</div>
+                    {children}
+                </div>
+            );
+
+            const num = (v, d) => (Number.isFinite(v)
+                ? v.toLocaleString(undefined, { minimumFractionDigits: d === undefined ? 0 : d, maximumFractionDigits: d === undefined ? 0 : d })
+                : '-');
+
             /* ป้ายอ้างอิงที่มาของสมการ วางท้ายสูตร ชี้เมาส์เพื่อดูรายละเอียด
                รหัส R = ทฤษฎี/มาตรฐานที่ตีพิมพ์  รหัส J = ดุลพินิจของผู้พัฒนา */
             const Ref = ({ id }) => {
                 const r = REFS[id];
                 if (!r) return null;
                 return (
-                    <sup className={`ml-1 px-1 py-0.5 rounded text-[9px] font-bold align-super cursor-help ${id.charAt(0) === 'J' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-200 text-slate-600 border border-slate-300'}`}
-                        title={r[0] + ' \u2014 ' + r[1] + (r[2] ? '\n' + r[2] : '')}>{id}</sup>
+                    <span className={`inline-block align-middle ml-1 px-1 rounded text-[9px] font-bold leading-none cursor-help whitespace-nowrap ${id.charAt(0) === 'J' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-200 text-slate-600 border border-slate-300'}`}
+                        style={{ paddingTop: '1px', paddingBottom: '1px', position: 'relative', top: '-1px' }}
+                        title={r[0] + ' \u2014 ' + r[1] + (r[2] ? '\n' + r[2] : '')}>{id}</span>
                 );
             };
 
