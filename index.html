@@ -456,8 +456,13 @@
                 + ขั้นที่ 8 Broms เพิ่มบล็อกประกาศตัวแปรและคอลัมน์แทนค่าของทั้ง 3 กลไก
                 + ตารางแรงผลักและแรงต้าน เพิ่มบรรทัดแทนค่าใต้สูตรทุกแถว
                   รูปแบบมาตรฐาน: ประกาศตัวแปร -> สมการ -> แทนค่า -> ผลลัพธ์
+           v3.8 — แก้การอ้างอิงข้ามข้อที่ชี้ไปยังตัวเลขที่ไม่มีอยู่จริง: ข้อ 6 อ้างว่า
+                  F_soil "จากข้อ 4.1" แต่สองข้อนี้ใช้คนละกรณีบรรทุก (4.1 ใช้กรณีที่
+                  ทรุดตัวมากสุด ส่วน 6 ใช้กรณีที่ดินรับแรงกดน้อยสุดซึ่งวิกฤตต่อการลื่นไถล)
+                  แก้โดยเพิ่มตาราง F_soil ของทุกกรณีบรรทุกในข้อ 4.1 พร้อมคอลัมน์ "ใช้ในข้อ"
+                  ระบุกรณีบรรทุกในทุกป้ายอ้างอิงข้ามข้อ และปรับทศนิยมให้ตรงกันทุกจุด
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v3.7 (แสดงวิธีคำนวณละเอียดทุกขั้น)';
+        const APP_VERSION = 'v3.8 (ตรวจย้อนกลับข้ามข้อได้ครบ)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -3179,7 +3184,7 @@
                                                     <div className="py-0.5">K<Sub text="p"/> = {num(calc.Kp_raft)} กก./ม. ต่อเข็ม 1 ต้น (จากขั้นที่ 2)</div>
                                                     <div className="py-0.5">S<Sub text="L"/> = {pile.spacingL} ม. &nbsp;|&nbsp; B = {calc.B.toFixed(2)} ม. &nbsp;|&nbsp; N = {calc.N_piles} ต้น</div>
                                                     <div className="py-0.5">x<Sub text="i"/> = {pileRows.map(x => x.toFixed(2)).join(', ')} ม. (ตำแหน่งเสาเข็ม)</div>
-                                                    <div className="py-0.5">V = {num(st.Vg, 1)} กก. &nbsp;|&nbsp; M<Sub text="toe"/> = {num(st.Mg, 1)} กก.-ม. (จากขั้นที่ 1)</div>
+                                                    <div className="py-0.5">V = {num(st.Vg, 1)} กก. &nbsp;|&nbsp; M<Sub text="toe"/> = {num(st.Mg, 1)} กก.-ม. (จากขั้นที่ 1 แถว <strong>{calc.raftGov.label}</strong>)</div>
                                                 </div>
                                             </CalcBlock>
 
@@ -3294,7 +3299,7 @@
                                     </div>
 
                                     {/* ── 4.1 แรงที่ดินรับ ── */}
-                                    <h5 className="font-bold text-slate-700 text-sm mb-2 mt-1">4.1 แรงกดที่ดินใต้ฐานรับ (กรณีวิกฤต {calc.raftGov.label})</h5>
+                                    <h5 className="font-bold text-slate-700 text-sm mb-2 mt-1">4.1 แรงกดที่ดินใต้ฐานรับ &mdash; แสดงรายละเอียดของ {calc.raftGov.label} (ทรุดตัวมากที่สุด)</h5>
                                     <table className="w-full text-left border-collapse text-sm print:text-xs mb-4">
                                         <tbody>
                                             <tr className="border-b border-slate-200">
@@ -3332,7 +3337,47 @@
                                             </tr>
                                         </tbody>
                                     </table>
-                                    <div className="text-[11px] text-slate-500 mb-4 -mt-2">
+                                    {/* ตาราง F_soil ของทุกกรณีบรรทุก เพื่อให้ข้ออื่นอ้างอิงย้อนกลับได้ */}
+                                    <div className="text-xs font-bold text-slate-600 mb-1 mt-3">F<Sub text="soil"/> ของทุกกรณีบรรทุก</div>
+                                    <table className="w-full text-left border-collapse text-sm print:text-xs mb-3">
+                                        <thead>
+                                            <tr className="border-b border-slate-300 text-slate-600">
+                                                <th className="py-1.5">กรณี</th>
+                                                <th className="text-right">V<Sub text="กลุ่ม"/> (กก.)</th>
+                                                <th className="text-right">q<Sub text="a"/></th>
+                                                <th className="text-right">q<Sub text="b"/></th>
+                                                <th className="text-right">F<Sub text="soil"/> (กก.)</th>
+                                                <th className="text-right">ทรุดสูงสุด</th>
+                                                <th>ใช้ในข้อ</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {[calc.pc1, calc.pc2].map(pc => {
+                                                const usedIn = [];
+                                                if (pc.label === calc.raftGov.label) usedIn.push('4.1, 4.3');
+                                                if (pc.label === calc.fricGov.label) usedIn.push('6');
+                                                return (
+                                                    <tr key={pc.label} className={`border-b border-slate-100 ${usedIn.length ? '' : 'text-slate-400'}`}>
+                                                        <td className="py-1.5 font-semibold">{pc.label}</td>
+                                                        <td className="text-right">{pc.V_grp.toFixed(0)}</td>
+                                                        <td className="text-right">{pc.soil.q_a.toFixed(1)}</td>
+                                                        <td className="text-right">{pc.soil.q_b.toFixed(1)}</td>
+                                                        <td className="text-right font-bold text-emerald-800">{pc.soil.Fs.toFixed(1)}</td>
+                                                        <td className="text-right">{(pc.soil.w_max * 1000).toFixed(3)} มม.</td>
+                                                        <td className="text-xs text-slate-500">{usedIn.join(' และ ') || '\u2014'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                    {calc.raftGov.label !== calc.fricGov.label && (
+                                        <div className="text-[11px] leading-snug bg-amber-50 print:bg-transparent border border-amber-200 text-amber-900 rounded p-2 mb-3">
+                                            <strong>หมายเหตุ:</strong> ข้อ 4.1 และ 4.3 แสดงรายละเอียดของ <strong>{calc.raftGov.label}</strong> ซึ่งทรุดตัวมากที่สุด (วิกฤตต่อแรงในเข็มและการทรุดตัว)
+                                            ส่วนข้อ 6 ใช้ <strong>{calc.fricGov.label}</strong> ซึ่งดินรับแรงกดน้อยที่สุด จึงมีแรงเสียดทานน้อยที่สุด (วิกฤตต่อการลื่นไถล)
+                                            ค่า F<Sub text="soil"/> ของทั้งสองกรณีจึงต่างกัน {Math.abs(calc.pc1.soil.Fs - calc.pc2.soil.Fs).toFixed(1)} กก. ดูตารางด้านบนประกอบ
+                                        </div>
+                                    )}
+                                    <div className="text-[11px] text-slate-500 mb-4">
                                         แผนภาพแรงกดใต้ฐานเป็นสี่เหลี่ยมคางหมู เพราะฐานแกร่งจึงทรุดตัวเชิงเส้น พื้นที่ของแผนภาพคูณความกว้างช่วงเสาเข็มคือแรงที่ดินรับ
                                         &nbsp;|&nbsp; ตรวจ q<Sub text="max"/> = {calc.raftS.q_max.toFixed(0)} เทียบ q<Sub text="allow"/> = {base.q_allow}
                                         {' '}({(100 * calc.raftS.q_max / Math.max(1, base.q_allow)).toFixed(0)}%) {calc.okRaftQ
@@ -3391,14 +3436,14 @@
                                         <tbody>
                                             <tr className="border-b border-slate-100 text-emerald-800">
                                                 <td className="py-1.5 font-semibold">ดินใต้ฐานราก</td>
-                                                <td className="text-xs text-slate-500">จากข้อ 4.1</td>
+                                                <td className="text-xs text-slate-500">จากข้อ 4.1 ({calc.raftGov.label})</td>
                                                 <td className="text-right font-semibold">{calc.raftS.Fs.toFixed(1)}</td>
                                                 <td className="text-right font-semibold">{(100 * calc.raftS.share).toFixed(1)}%</td>
                                             </tr>
                                             {calc.raftS.rows.map(r => (
                                                 <tr key={r.id} className="border-b border-slate-100 text-indigo-800">
                                                     <td className="py-1.5">เสาเข็มแถวที่ {r.id} (x = {r.x.toFixed(2)} ม.)</td>
-                                                    <td className="text-xs text-slate-500">จากข้อ 4.2</td>
+                                                    <td className="text-xs text-slate-500">จากข้อ 4.2 ({calc.raftGov.label})</td>
                                                     <td className="text-right font-semibold">{r.P.toFixed(1)}</td>
                                                     <td className="text-right">{(100 * r.P / Math.max(1, calc.raftGov.V_grp)).toFixed(1)}%</td>
                                                 </tr>
@@ -3417,7 +3462,7 @@
                                             </tr>
                                             <tr className={Math.abs(calc.raftS.rows.reduce((a, r) => a + r.P, 0) + calc.raftS.Fs - calc.raftGov.V_grp) < 1 ? 'text-emerald-700' : 'text-rose-700'}>
                                                 <td className="py-2 font-semibold">ตรวจสมดุล</td>
-                                                <td className="text-xs font-normal text-slate-500">ต้องเท่ากับ V<Sub text="กลุ่ม"/> จากขั้นที่ 1</td>
+                                                <td className="text-xs font-normal text-slate-500">ต้องเท่ากับ V<Sub text="กลุ่ม"/> จากขั้นที่ 1 แถว {calc.raftGov.label}</td>
                                                 <td className="text-right font-bold">{calc.raftGov.V_grp.toFixed(1)}</td>
                                                 <td className="text-right font-bold">
                                                     {Math.abs(calc.raftS.rows.reduce((a, r) => a + r.P, 0) + calc.raftS.Fs - calc.raftGov.V_grp) < 1 ? '\u2713 ตรงกัน' : '\u2717 ไม่ตรง'}
@@ -3543,7 +3588,7 @@
                                 <div>
                                     <div className="text-xs bg-slate-100 print:bg-transparent border border-slate-200 rounded p-2 mb-3 leading-snug">
                                         เมื่อฐานสัมผัสดินและดินรับแรงกด F<Sub text="soil"/> อยู่จริง ย่อมมีแรงเสียดทานที่ก้นฐานมาช่วยต้านการเลื่อน
-                                        แรงตั้งฉากที่ใช้คือ <strong>F<Sub text="soil"/> จากขั้นที่ 4</strong> ไม่ใช่ &Sigma;V ทั้งก้อน เพราะส่วนที่ถ่ายลงเสาเข็มไม่ได้กดที่ก้นฐาน
+                                        แรงตั้งฉากที่ใช้คือ <strong>F<Sub text="soil"/> จากตารางในข้อ 4.1 แถว {calc.fricGov.label}</strong> ไม่ใช่ &Sigma;V ทั้งก้อน เพราะส่วนที่ถ่ายลงเสาเข็มไม่ได้กดที่ก้นฐาน
                                     </div>
                                     <div className="flex h-8 rounded overflow-hidden border border-slate-400 text-[11px] font-bold text-white mb-3">
                                         <div className="flex items-center justify-center bg-emerald-600 print:bg-emerald-600"
@@ -3573,13 +3618,13 @@
                                             </tr>
                                             <tr className="border-b border-slate-100">
                                                 <td className="py-1.5 text-slate-600">แรงกดที่ดินรับ F<Sub text="soil"/></td>
-                                                <td className="text-xs text-slate-500">จากข้อ 4.1</td>
-                                                <td className="text-right">{calc.fricGov.Fs_soil.toFixed(0)}</td>
+                                                <td className="text-xs text-slate-500">จากข้อ 4.1 ตาราง F<Sub text="soil"/> แถว <strong>{calc.fricGov.label}</strong></td>
+                                                <td className="text-right">{calc.fricGov.Fs_soil.toFixed(1)}</td>
                                                 <td className="text-right text-slate-400">&mdash;</td>
                                             </tr>
                                             <tr className="border-b border-slate-100">
                                                 <td className="py-1.5 text-slate-600">แรงเสียดทานประลัย</td>
-                                                <td className="text-xs text-slate-500">f &times; F<Sub text="soil"/> = {calc.f_calc.toFixed(3)} &times; {calc.fricGov.Fs_soil.toFixed(0)}</td>
+                                                <td className="text-xs text-slate-500">f &times; F<Sub text="soil"/> = {calc.f_calc.toFixed(3)} &times; {calc.fricGov.Fs_soil.toFixed(1)}</td>
                                                 <td className="text-right">{calc.fricGov.H_fric_ult.toFixed(0)}</td>
                                                 <td className="text-right text-slate-400">&mdash;</td>
                                             </tr>
