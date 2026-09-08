@@ -294,6 +294,88 @@
             });
         };
 
+        /* ═══════════════════════════════════════════════════════════════════
+           ที่มาของสมการทุกตัวที่ใช้ในโปรแกรม เพื่อการตรวจสอบย้อนกลับ
+           รหัส R = มาจากทฤษฎี/มาตรฐานที่ตีพิมพ์
+           รหัส J = ดุลพินิจของผู้พัฒนาโปรแกรม ไม่ใช่ข้อกำหนดจากมาตรฐาน
+           ═══════════════════════════════════════════════════════════════════ */
+        const REFS = {
+            R1:  ['K\u2090 = tan\u00B2(45 - \u03C6/2)', 'Rankine (1857) ทฤษฎีแรงดันดินรุก',
+                  'สมมติ: หลังกำแพงตั้งฉาก ผิวดินถมราบ ไม่คิดแรงเสียดทานระหว่างดินกับผนัง'],
+            R2:  ['K\u2080 = 1 - sin \u03C6', 'Jaky (1944)',
+                  'ใช้กับดินอัดตัวปกติ (normally consolidated) กำแพงที่ถูกยึดไม่ให้ขยับ'],
+            R3:  ['K\u209A = tan\u00B2(45 + \u03C6/2)', 'Rankine แรงดันดินด้านรับ',
+                  'ใช้เฉพาะในสมการ Broms สำหรับดินทราย ไม่ได้ใช้เป็นแรงต้านการลื่นไถล'],
+            R4:  ["\u03B3' = \u03B3_sat - \u03B3_w", 'Terzaghi (1925) หลักหน่วยแรงประสิทธิผล',
+                  'ใช้กับแรงดันดินใต้ระดับน้ำ โดยคิดแรงดันน้ำแยกออกมาต่างหาก'],
+            R5:  ['p = K \u00D7 \u03B3 \u00D7 z', 'Rankine การกระจายแรงดันเชิงเส้นตามความลึก',
+                  'แรงดันเพิ่มเชิงเส้นตามความลึก ให้แผนภาพรูปสามเหลี่ยม'],
+            R6:  ['p = K \u00D7 q', 'แรงดันจากน้ำหนักบรรทุกจรสม่ำเสมอ',
+                  'Surcharge สม่ำเสมอให้แรงดันคงที่ตลอดความลึก แผนภาพรูปสี่เหลี่ยม'],
+            R7:  ['u = \u03B3_w \u00D7 h', 'แรงดันน้ำสถิต',
+                  'ไม่ขึ้นกับชนิดดิน คิดแยกจากแรงดันดินประสิทธิผล'],
+            R8:  ['U = \u00BD(u_toe + u_heel) \u00D7 B \u00D7 L', 'USACE EM 1110-2-2502 แนวปฏิบัติกำแพงกันดิน',
+                  'บังคับเมื่อใช้ \u03B3_sat คิดน้ำหนักดิน มิฉะนั้นเป็นการนับน้ำหนักน้ำเป็นแรงต้าน'],
+            R9:  ['F.S._OT = \u03A3M_R / \u03A3M_O', 'Das, Principles of Foundation Engineering',
+                  'โมเมนต์รอบจุด Toe หน้าสุดของฐานราก'],
+            R10: ['F.S._Slide = f \u00D7 \u03A3V / \u03A3P ; f = tan \u03B4', 'Das / Bowles',
+                  'ใช้ \u03B4 = \u03C6_base ไม่คิดแรงยึดเกาะและแรงดันดินด้านรับ ซึ่งเป็นการคิดแบบปลอดภัย'],
+            R11: ['X\u0304 = (\u03A3M_R - \u03A3M_O) / \u03A3V', 'สมดุลสถิตยศาสตร์',
+                  'ตำแหน่งที่แนวแรงลัพธ์ตัดผ่านระดับก้นฐานราก'],
+            R12: ['q = V/(B\u00D7L) \u00D7 (1 \u00B1 6|e|/B)', 'สูตรหน่วยแรงรวมแรงตามแกนกับโมเมนต์ดัด (Navier)',
+                  'ใช้ได้เฉพาะเมื่อหน้าฐานสัมผัสดินเต็มความกว้าง คือ q_min \u2265 0'],
+            R13: ['|e| \u2264 B/6', 'กฎ Middle-third',
+                  'ได้จากเงื่อนไข q_min \u2265 0 ในสมการ R12 ไม่ใช่กฎที่ตั้งขึ้นลอย ๆ'],
+            R14: ['q_max = 2V / (3 \u00D7 a \u00D7 L)', 'การกระจายแรงแบบสามเหลี่ยม เมื่อหลุด Middle-third',
+                  'จากสมดุลแรงและโมเมนต์ของแผนภาพสามเหลี่ยม ที่ e = B/6 ให้ค่าเท่ากับ R12 พอดี'],
+            R15: ["B' = B - 2|e|", 'Meyerhof (1953) ความกว้างประสิทธิผล',
+                  'มาตรฐานส่วนใหญ่ใช้หากำลังแบกทาน โปรแกรมแสดงค่าให้แต่ยังไม่ได้นำไปคำนวณต่อ'],
+            R16: ['P\u1D62 = V/N \u00B1 M \u00D7 d\u1D62 / \u03A3d\u00B2', 'Bowles, Foundation Analysis and Design (elastic center)',
+                  'สมมติฐานรากแกร่งและเสาเข็มทุกต้นมีความแข็งเท่ากัน โมเมนต์ต้องอ้างอิง CG กลุ่มเสาเข็ม'],
+            R17: ['\u03A3V = k_s\u00B7S_L\u00B7\u222Bw dx + \u03A3(K_p\u00B7w(x\u1D62))', 'Poulos (2001) Géotechnique 51(2) วิธีระดับ 2 (plate on springs)',
+                  'แบ่งแรงด้วยความแข็งและเงื่อนไขการเคลื่อนตัวที่ต้องเท่ากัน ไม่ใช่ด้วยกำลัง'],
+            R18: ['k_s = โมดูลัสปฏิกิริยาของดิน', 'Terzaghi (1955) Evaluation of coefficients of subgrade reaction',
+                  'ไม่ใช่คุณสมบัติของดินล้วน ขึ้นกับขนาดและรูปร่างของพื้นที่รับแรงด้วย'],
+            R19: ['แนวคิดฐานรากร่วมดิน-เสาเข็ม', 'Burland, Broms & de Mello (1977) ; Randolph (1994) ; Katzenbach (CPRF)',
+                  'เสาเข็มทำหน้าที่ลดการทรุดตัว โดยฐานรากยังรับแรงร่วมด้วย'],
+            R20: ['\u03B2 = (k / 4EI)^0.25', 'Hetényi (1946) Beams on Elastic Foundation',
+                  'ค่าคงที่ของระบบคาน-ฐานยืดหยุ่น ส่วนกลับคือระยะยาวลักษณะ'],
+            R21: ['หัวยึดแน่น: y = H\u03B2/k , M = H/(2\u03B2)', 'Hetényi (1946) คานกึ่งอนันต์ปลายบังคับไม่ให้หมุน',
+                  'โมเมนต์สูงสุดอยู่ที่หัวเข็ม'],
+            R22: ['หัวหมุนได้: y = 2H\u03B2/k , M_max = 0.322H/\u03B2', 'Hetényi (1946) คานกึ่งอนันต์ปลายอิสระ',
+                  'โมเมนต์สูงสุดอยู่ที่ความลึก \u03C0/(4\u03B2) โก่งเป็นสองเท่าของหัวยึดแน่น'],
+            R23: ['k = 67 c_u', 'Davisson (1970)',
+                  'โมดูลัสปฏิกิริยาด้านข้างของดินเหนียว ถือว่าคงที่ตามความลึก'],
+            R24: ['T = (EI / n_h)^0.2 ; y = 0.93HT\u00B3/EI', 'Reese & Matlock (1956)',
+                  'สำหรับดินทรายที่โมดูลัสเพิ่มเชิงเส้นตามความลึก หัวหมุนได้ใช้ 2.43 แทน 0.93'],
+            R25: ['ค่า n_h ตามความแน่นของทราย', 'Terzaghi (1955) / Reese',
+                  'หลวม 2200 ปานกลาง 6600 แน่น 17600 kN/m\u00B3 ค่าจมน้ำราวครึ่งหนึ่ง'],
+            R26: ['n\u00B7M_y = H(1.5D + 0.5f) ; f = H/(9c_u D)', 'Broms (1964a) Lateral resistance of piles in cohesive soils, JSMFD ASCE',
+                  'p_u = 9c_u D ที่ความลึกเกิน 1.5D  n = 1 หัวหมุนได้, n = 2 หัวยึดแน่น'],
+            R27: ["n\u00B7M_y = H(e + 0.67f) ; f = 0.82\u221A(H/(K_p\u03B3'D))", 'Broms (1964b) Lateral resistance of piles in cohesionless soils, JSMFD ASCE',
+                  "p_u = 3K_p\u03B3'Dz เพิ่มเชิงเส้นตามความลึก"],
+            R28: ['เกณฑ์เข็มยาว \u03B2L \u2265 2.5 หรือ L/T \u2265 4', 'Broms (1964a, 1964b)',
+                  'ถ้าไม่เข้าเกณฑ์ต้องใช้สมการเข็มสั้นซึ่งวิบัติแบบหมุนทั้งต้น'],
+            R29: ["E_c = 4700\u221Af'c (MPa)", 'ACI 318',
+                  'โมดูลัสยืดหยุ่นของคอนกรีตน้ำหนักปกติ'],
+            R30: ["f_r = 0.62\u221Af'c (MPa)", 'ACI 318 modulus of rupture',
+                  'หน่วยแรงดึงที่ผิวคอนกรีตซึ่งทำให้เริ่มแตกร้าว'],
+            R31: ['M_cr = (f_r + f_pe) \u00D7 Z', 'คอนกรีตอัดแรง หลักการซ้อนทับหน่วยแรง',
+                  'แรงอัดคงค้างช่วยเลื่อนจุดแตกร้าวออกไป'],
+            J1:  ['กรณีตรวจความทนทาน k_s = 0', 'ดุลพินิจของผู้พัฒนา',
+                  'แนวปฏิบัติ CPRF กำหนดเพียงว่ากำลังประลัยรวมต้องพอ ไม่ได้บังคับว่าเข็มลำพังต้องรับไหว ข้อนี้จึงเข้มกว่ามาตรฐาน ปรับได้ด้วยตัวคูณ Robustness'],
+            J2:  ['หารแรงเสียดทานด้วย F.S. ก่อนนำมาบวก', 'ดุลพินิจของผู้พัฒนา',
+                  'เพื่อไม่ให้ผสมค่าประลัย (แรงเสียดทาน) กับค่าใช้งาน (กำลังด้านข้างของเข็ม) ในสมการเดียวกัน'],
+            J3:  ['k_s = q_allow \u00F7 s_soil', 'ดุลพินิจของผู้พัฒนา (ประมาณเชิงปฏิบัติ)',
+                  'วิธีที่เข้มงวดกว่าคือหาจาก E_s ของดินโดยตรง หรือจาก plate load test ที่แก้ผลของขนาดฐานแล้ว'],
+            J4:  ['ตรวจ 2 กรณีบรรทุก LC1 / LC2', 'ดุลพินิจของผู้พัฒนา',
+                  'น้ำหนักจรหายไปเมื่อไหร่ก็ได้ จึงไม่ควรพึ่งเป็นแรงต้าน มาตรฐานบางฉบับกำหนดชุดกรณีบรรทุกต่างจากนี้'],
+            J5:  ['M_u \u2248 1.6 \u00D7 M_cr', 'ดุลพินิจของผู้พัฒนา (ค่าเริ่มต้น)',
+                  'ควรใช้ค่าจริงจากผู้ผลิตเสาเข็ม ปรับตัวคูณได้ในหน้าพารามิเตอร์'],
+            J6:  ['แรงเฉือนกระจายเท่ากันทุกเข็ม', 'ดุลพินิจของผู้พัฒนา (การลดรูป)',
+                  'ไม่คิดสติฟเนสด้านข้างที่ต่างกันและโมเมนต์ที่หัวเข็ม การวิเคราะห์ p-y จะให้ผลละเอียดกว่า']
+        };
+
         const fmtTime = function (ms) {
             try {
                 var d = new Date(ms);
@@ -353,8 +435,21 @@
                   เช่น แสดง 6041 แต่เขียนว่า "> 6200" ทั้งที่ที่ไม่ผ่านคือกรณีทนทาน 6476
                   ตอนนี้ทุกป้ายใช้ checkResult() ที่ระบุว่ากรณีไหนไม่ผ่านพร้อมตัวเลขจริง
                   และการตรวจลื่นไถลระดับระบบแสดงทั้งสองกรณีคู่กัน
+           v3.5 — แสดงการแบ่งแรงระหว่างดินกับเสาเข็มแบบรายการต่อรายการ
+                  ขั้นที่ 4 แยกเป็น 4.1 ที่มาของ F_soil (จาก q ที่ขอบทั้งสอง x พื้นที่คางหมู)
+                  4.2 แรงในเข็มแต่ละแถวพร้อมการแทนค่า และ 4.3 ตารางสรุปสัดส่วน + แถบภาพ
+                  พร้อมการตรวจสมดุลว่า ดิน + เข็มทุกต้น = V ที่รับมาจากขั้นที่ 1
+                  ขั้นที่ 6 ปรับตารางแนวราบให้อยู่ในรูปแบบเดียวกัน
+           v3.6 — ตรวจสอบรอบใหม่ พบและแก้: หน้าแรงแบกทานแสดงผล Middle-third ของ
+                  กรณีที่คุม q เท่านั้น ขณะที่หน้าสรุปตรวจทั้งสองกรณี (พบ 6 ชุดพารามิเตอร์
+                  ที่ให้ข้อสรุปขัดกัน) และการ์ดเยื้องศูนย์แสดง |e| ของกรณีคุม q คู่กับป้าย
+                  ที่ตัดสินจากทั้งสองกรณี ตอนนี้ทั้งสองจุดแสดงทุกกรณีบรรทุกและสรุปตรงกัน
+                + ตาราง REFS ที่มาของสมการ 37 รายการ แยก R (ทฤษฎีที่ตีพิมพ์) กับ
+                  J (ดุลพินิจของผู้พัฒนา ไม่ใช่ข้อกำหนดจากมาตรฐาน) พร้อมป้ายอ้างอิง
+                  ฝังท้ายสูตร 25 จุด ชี้เมาส์ดูที่มาและข้อจำกัดได้
+                + ตรวจสมดุลโมเมนต์ของ Piled Raft เพิ่ม (ไม่เคยตรวจมาก่อน) ผ่านที่ 1e-4
         ════════════════════════════════════════════════════════════════════ */
-        const APP_VERSION = 'v3.4 (Piled Raft + ป้ายผลตรวจสองกรณี)';
+        const APP_VERSION = 'v3.6 (ที่มาสมการครบ 37 รายการ)';
 
         const Fraction = ({ top, bottom }) => (
             <div className="inline-flex flex-col items-center justify-center align-middle mx-1" style={{ verticalAlign: 'middle' }}>
@@ -1471,7 +1566,7 @@
 
                                 {/* ── กรณีบรรทุก ── */}
                                 <div className="bg-slate-50 print:bg-transparent p-4 print:p-0 rounded-lg border border-slate-100 print:border-none">
-                                    <h4 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2 print:pb-1">4. กรณีบรรทุกที่ตรวจสอบ</h4>
+                                    <h4 className="text-sm font-bold text-slate-700 mb-3 border-b border-slate-200 pb-2 print:pb-1">4. กรณีบรรทุกที่ตรวจสอบ<Ref id="J4"/></h4>
                                     <div className="text-xs text-slate-600 space-y-2">
                                         <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200">
                                             <strong className="text-slate-700">LC1:</strong> คิด Surcharge จร ทั้งด้านผลักและด้านต้าน
@@ -1690,7 +1785,7 @@
                                                     <LatField label={<span>f&apos;<Sub text="c"/> ของเข็ม</span>} value={lat.fcPile} onChange={handleLat('fcPile')} unit="ksc" />
                                                     <LatField label={<span>f<Sub text="pe"/> แรงอัดคงค้าง</span>} value={lat.fpe} onChange={handleLat('fpe')} unit="ksc" />
                                                     <LatField label="ตัวคูณ EI แตกร้าว" value={lat.eiFactor} onChange={handleLat('eiFactor')} />
-                                                    <LatField label={<span>M<Sub text="u"/> เป็นกี่เท่า M<Sub text="cr"/></span>} value={lat.muFactor} onChange={handleLat('muFactor')} />
+                                                    <LatField label={<span>M<Sub text="u"/> เป็นกี่เท่า M<Sub text="cr"/><Ref id="J5"/></span>} value={lat.muFactor} onChange={handleLat('muFactor')} />
                                                     <LatField label="F.S. ต่อ Broms" value={lat.fsBroms} onChange={handleLat('fsBroms')} />
                                                     <LatField label="p-multiplier (ผลกลุ่ม)" value={lat.pMult} onChange={handleLat('pMult')} />
                                                 </div>
@@ -1778,6 +1873,10 @@
                         : 'มีแถวที่รับแรงถอน')
                     : '';
 
+                /* ค่าเยื้องศูนย์ที่วิกฤตที่สุดในบรรดากรณีบรรทุก เพื่อให้ตัวเลขกับป้ายสอดคล้องกัน */
+                const eMax = Math.max.apply(null, calc.cases.map(c => Math.abs(c.e)));
+                const eGov = calc.cases.filter(c => Math.abs(c.e) === eMax)[0] || calc.govQ;
+
                 const soilCards = (muted) => (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-6 print:gap-4">
                         <StatCard muted={muted} label="Overturning (F.S.)" value={fmt(calc.FS_ot)}
@@ -1788,10 +1887,10 @@
                             cond={calc.okSlide}
                             tTrue={`\u2265 ${fsSlideReq.toFixed(2)} ผ่าน`} tFalse={`\u003C ${fsSlideReq.toFixed(2)} ไม่ผ่าน`}
                             note={'กรณีวิกฤต ' + calc.govSL.label} />
-                        <StatCard muted={muted} label="เยื้องศูนย์ |e| (ม.)" value={Math.abs(calc.e).toFixed(3)}
+                        <StatCard muted={muted} label="เยื้องศูนย์ |e| สูงสุด (ม.)" value={eMax.toFixed(3)}
                             cond={calc.okEcc}
                             tTrue={`\u2264 B/6 (${calc.B6.toFixed(2)} ม.)`} tFalse={`\u003E B/6 (${calc.B6.toFixed(2)} ม.)`}
-                            note={calc.bearingMode === 'triangle' ? 'กระจายแบบสามเหลี่ยม' : calc.bearingMode === 'outside' ? 'แรงลัพธ์นอกฐาน' : 'กระจายเต็มหน้าฐาน'} />
+                            note={`กรณี ${eGov.label} \u00B7 ${eGov.mode === 'triangle' ? 'กระจายแบบสามเหลี่ยม' : eGov.mode === 'outside' ? 'แรงลัพธ์นอกฐาน' : 'กระจายเต็มหน้าฐาน'}`} />
                         <StatCard muted={muted} label={<span>q<Sub text="max"/> (กก./ม.&sup2;)</span>} value={fmt(calc.q_max, 0)}
                             cond={calc.okBear}
                             tTrue={"\u2264 q_allow ผ่าน"} tFalse={"\u003E q_allow ไม่ผ่าน"}
@@ -2246,12 +2345,12 @@
                             <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-4">
                                 <div className={`p-3 border rounded shadow-sm ${calc.K_mode === 'ka' ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 opacity-60'}`}>
                                     <div className="font-semibold text-slate-700 border-b pb-1 mb-2">K<Sub text="a"/> (Active) {calc.K_mode === 'ka' && <span className="text-blue-600 text-xs">&larr; ใช้ค่านี้</span>}</div>
-                                    <div className="text-slate-600">K<Sub text="a"/> = tan&sup2;(45 - &phi;/2) = tan&sup2;(45 - {soil.phi_backfill}/2)</div>
+                                    <div className="text-slate-600">K<Sub text="a"/> = tan&sup2;(45 - &phi;/2) = tan&sup2;(45 - {soil.phi_backfill}/2)<Ref id="R1"/></div>
                                     <div className="font-bold text-blue-700 mt-1">= {calc.K_active.toFixed(3)}</div>
                                 </div>
                                 <div className={`p-3 border rounded shadow-sm ${calc.K_mode === 'k0' ? 'bg-blue-50 border-blue-300' : 'bg-white border-slate-200 opacity-60'}`}>
                                     <div className="font-semibold text-slate-700 border-b pb-1 mb-2">K<Sub text="0"/> (At-rest) {calc.K_mode === 'k0' && <span className="text-blue-600 text-xs">&larr; ใช้ค่านี้</span>}</div>
-                                    <div className="text-slate-600">K<Sub text="0"/> = 1 - sin &phi; = 1 - sin({soil.phi_backfill}&deg;)</div>
+                                    <div className="text-slate-600">K<Sub text="0"/> = 1 - sin &phi; = 1 - sin({soil.phi_backfill}&deg;)<Ref id="R2"/></div>
                                     <div className="font-bold text-blue-700 mt-1">= {calc.K_rest.toFixed(3)}</div>
                                 </div>
                             </div>
@@ -2272,19 +2371,19 @@
                                 </div>
                                 <div className="bg-white p-3 border border-slate-200 rounded shadow-sm">
                                     <div className="font-semibold text-slate-700 border-b pb-1 mb-2">p<Sub text="2"/> (จากดินเหนือระดับน้ำ)</div>
-                                    <div className="text-slate-600">p<Sub text="2"/> = K &times; &gamma;<Sub text="c"/> &times; h<Sub text="dry"/></div>
+                                    <div className="text-slate-600">p<Sub text="2"/> = K &times; &gamma;<Sub text="c"/> &times; h<Sub text="dry"/><Ref id="R5"/></div>
                                     <div className="text-slate-600">p<Sub text="2"/> = {calc.Ka.toFixed(3)} &times; {soil.gamma_c} &times; {calc.h_dry.toFixed(2)}</div>
                                     <div className="font-bold text-blue-700 mt-1">= {calc.p2.toFixed(2)} กก./ม.&sup2;</div>
                                 </div>
                                 <div className="bg-white p-3 border border-slate-200 rounded shadow-sm">
                                     <div className="font-semibold text-slate-700 border-b pb-1 mb-2">p<Sub text="3"/> (จากดินใต้ระดับน้ำ)</div>
-                                    <div className="text-slate-600">p<Sub text="3"/> = K &times; (&gamma;<Sub text="sat"/> - &gamma;<Sub text="w"/>) &times; h<Sub text="w"/></div>
+                                    <div className="text-slate-600">p<Sub text="3"/> = K &times; (&gamma;<Sub text="sat"/> - &gamma;<Sub text="w"/>) &times; h<Sub text="w"/><Ref id="R4"/></div>
                                     <div className="text-slate-600">p<Sub text="3"/> = {calc.Ka.toFixed(3)} &times; {calc.gamma_sub} &times; {calc.h_w.toFixed(2)}</div>
                                     <div className="font-bold text-blue-700 mt-1">= {calc.p3.toFixed(2)} กก./ม.&sup2;</div>
                                 </div>
                                 <div className="bg-white p-3 border border-slate-200 rounded shadow-sm">
                                     <div className="font-semibold text-slate-700 border-b pb-1 mb-2">p<Sub text="4"/> (จากแรงดันน้ำสถิต)</div>
-                                    <div className="text-slate-600">p<Sub text="4"/> = &gamma;<Sub text="w"/> &times; h<Sub text="w"/></div>
+                                    <div className="text-slate-600">p<Sub text="4"/> = &gamma;<Sub text="w"/> &times; h<Sub text="w"/><Ref id="R7"/></div>
                                     <div className="text-slate-600">p<Sub text="4"/> = {calc.gamma_w} &times; {calc.h_w.toFixed(2)}</div>
                                     <div className="font-bold text-blue-700 mt-1">= {calc.p4.toFixed(2)} กก./ม.&sup2;</div>
                                 </div>
@@ -2580,7 +2679,7 @@
                                         </tr>
                                         {/* ═══ [C1] แรงดันน้ำยกใต้ฐานราก ═══ */}
                                         <tr className={`border-b border-slate-200 ${calc.U > 0 ? 'bg-rose-50' : 'opacity-50'}`}>
-                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#bae6fd] mr-2 border border-[#0284c7]"></span>U: แรงดันน้ำยกใต้ฐาน <span className="text-rose-600 font-bold">(ลบ)</span></td>
+                                            <td className="py-2 whitespace-nowrap"><span className="inline-block w-3 h-3 bg-[#bae6fd] mr-2 border border-[#0284c7]"></span>U: แรงดันน้ำยกใต้ฐาน<Ref id="R8"/> <span className="text-rose-600 font-bold">(ลบ)</span></td>
                                             <td>&frac12; &times; (u<Sub text="toe"/> + u<Sub text="heel"/>) &times; B &times; L</td>
                                             <td className="text-rose-600">{calc.U > 0 ? '-' : ''}{calc.U.toFixed(2)}</td>
                                             <td>{calc.x_U.toFixed(2)}</td>
@@ -2681,7 +2780,7 @@
 
                     <StepBox title="1. ตรวจสอบการพลิกคว่ำ (Overturning)">
                         <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mb-2">
-                            <span>F.S.<Sub text="OT"/> = </span>
+                            <span>F.S.<Sub text="OT"/><Ref id="R9"/> = </span>
                             <Fraction top={<span>&Sigma;M<Sub text="R"/> - M<Sub text="U"/></span>} bottom={<span>&Sigma;M<Sub text="O"/></span>} />
                             <span>=</span>
                             <Fraction top={calc.govOT.Mr.toFixed(2)} bottom={calc.MO.toFixed(2)} />
@@ -2697,7 +2796,7 @@
 
                     <StepBox title="2. ตรวจสอบการลื่นไถล (Sliding)">
                         <div className="flex items-center flex-wrap gap-x-4 gap-y-2 mb-2">
-                            <span>F.S.<Sub text="Slide"/> = </span>
+                            <span>F.S.<Sub text="Slide"/><Ref id="R10"/> = </span>
                             <Fraction top={<span>f &times; (&Sigma;V - U)</span>} bottom={<span>&Sigma;P</span>} />
                             <span>=</span>
                             <Fraction top={`${calc.f_calc.toFixed(3)} \u00D7 ${calc.govSL.V.toFixed(2)}`} bottom={calc.sumP.toFixed(2)} />
@@ -2762,7 +2861,7 @@
                                 <div className="flex items-center flex-wrap gap-x-2 gap-y-1 mb-2">
                                     <span className="overline text-lg leading-none">X</span>
                                     <span>=</span>
-                                    <Fraction top={<span>(&Sigma;M<Sub text="R"/> - M<Sub text="U"/>) - &Sigma;M<Sub text="O"/></span>} bottom={<span>&Sigma;V - U</span>} />
+                                    <Fraction top={<span>(&Sigma;M<Sub text="R"/> - M<Sub text="U"/>) - &Sigma;M<Sub text="O"/></span>} bottom={<span>&Sigma;V - U</span>} /><Ref id="R11"/>
                                     <span>=</span>
                                     <Fraction top={`${calc.govQ.Mr.toFixed(2)} - ${calc.MO.toFixed(2)}`} bottom={calc.govQ.V.toFixed(2)} />
                                     <span className="font-bold">= {calc.X_bar.toFixed(3)} ม.</span>
@@ -2777,11 +2876,21 @@
                                 </div>
                             </div>
                             <div className="bg-slate-100 p-3 rounded border border-slate-200">
-                                <span className="font-semibold text-slate-700 block mb-1">กฎ Middle-Third (|e| &le; B/6):</span>
+                                <span className="font-semibold text-slate-700 block mb-1">กฎ Middle-Third (|e| &le; B/6)<Ref id="R13"/>:</span>
                                 |e| = {calc.e === 0 ? '0.000' : Math.abs(calc.e).toFixed(3)} ม. เทียบกับ B/6 = {calc.B6.toFixed(3)} ม. <br/>
-                                {calc.isMiddleThird
-                                    ? <span className="text-emerald-600 font-bold">ผ่าน (หน่วยแรงกระจายเต็มหน้าฐาน)</span>
-                                    : <span className="text-rose-600 font-bold">ไม่ผ่าน (หน้าฐานสัมผัสดินเพียงบางส่วน)</span>}
+                                {calc.cases.map(c => (
+                                    <div key={c.label} className="flex justify-between items-center border-b border-slate-200 py-0.5">
+                                        <span>{c.label}: |e| = {Math.abs(c.e).toFixed(3)}</span>
+                                        {c.inMid
+                                            ? <span className="text-emerald-600 font-bold">อยู่ใน Middle-third</span>
+                                            : <span className="text-rose-600 font-bold">หลุด Middle-third</span>}
+                                    </div>
+                                ))}
+                                <div className="pt-1 font-bold">
+                                    สรุป: {calc.okEcc
+                                        ? <span className="text-emerald-600">ผ่านทั้งสองกรณี (หน่วยแรงกระจายเต็มหน้าฐาน)</span>
+                                        : <span className="text-rose-600">ไม่ผ่าน &mdash; มีกรณีที่หน้าฐานสัมผัสดินเพียงบางส่วน</span>}
+                                </div>
                                 <div className="mt-2 text-xs text-slate-600 border-t border-slate-300 pt-2">
                                     ความยาวสัมผัสจริง B<Sub text="eff"/> = <strong>{calc.B_eff.toFixed(3)} ม.</strong>
                                     {' '}({calc.B > 0 ? (100 * calc.B_eff / calc.B).toFixed(0) : 0}% ของ B)
@@ -2807,7 +2916,7 @@
                                         <div className="flex items-center flex-wrap gap-x-2 mb-2 text-rose-700 font-semibold">
                                             <span>q<Sub text="max"/> =</span>
                                             <Fraction top={<span>&Sigma;V - U</span>} bottom={<span>B &times; L</span>} />
-                                            <span>&times; (1 +</span>
+                                            <span>&times; (1 +</span><Ref id="R12"/>
                                             <Fraction top={<span>6|e|</span>} bottom={<span>B</span>} />
                                             <span>)</span>
                                         </div>
@@ -2853,7 +2962,7 @@
                                     <div>
                                         <div className="flex items-center flex-wrap gap-x-2 mb-2 text-rose-700 font-semibold">
                                             <span>q<Sub text="max"/> =</span>
-                                            <Fraction top={<span>2 &times; (&Sigma;V - U)</span>} bottom={<span>3 &times; a &times; L</span>} />
+                                            <Fraction top={<span>2 &times; (&Sigma;V - U)</span>} bottom={<span>3 &times; a &times; L</span>} /><Ref id="R14"/>
                                         </div>
                                         <div>
                                             = (2 &times; {calc.govQ.V.toFixed(2)}) / (3 &times; {(calc.B_eff / 3).toFixed(3)} &times; {calc.L.toFixed(2)})<br/>
@@ -2872,7 +2981,7 @@
                         </div>
                         {!calc.isMiddleThird && (
                             <div className="mt-2 text-xs text-slate-500">
-                                * มาตรฐานส่วนใหญ่ยังกำหนดให้ตรวจสอบกำลังแบกทานด้วยความกว้างประสิทธิผล B' = B - 2|e| = {Math.max(0, calc.B - 2 * Math.abs(calc.e)).toFixed(3)} ม. (ยังไม่ได้รวมในโปรแกรมนี้)
+                                * มาตรฐานส่วนใหญ่ยังกำหนดให้ตรวจสอบกำลังแบกทานด้วยความกว้างประสิทธิผล B' = B - 2|e| = {Math.max(0, calc.B - 2 * Math.abs(calc.e)).toFixed(3)} ม.<Ref id="R15"/> (ยังไม่ได้รวมในโปรแกรมนี้)
                             </div>
                         )}
                     </StepBox>
@@ -2913,7 +3022,7 @@
                         {/* ═══ [PR] แผงสรุปโหมด Piled Raft ═══ */}
                         {pile.designMode === 'raft' && (
                             <div className={`p-4 rounded-lg text-sm print:break-inside-avoid border-2 ${calc.okRaftContact && calc.okRaftSolve ? 'bg-indigo-50 border-indigo-300 text-indigo-900' : 'bg-rose-50 border-rose-300 text-rose-900'}`}>
-                                <div className="font-bold mb-2">โหมด Piled Raft &mdash; แบ่งแรงด้วยความแข็ง ไม่ใช่กำลัง</div>
+                                <div className="font-bold mb-2">โหมด Piled Raft &mdash; แบ่งแรงด้วยความแข็ง ไม่ใช่กำลัง<Ref id="R19"/></div>
                                 <div className="text-[13px] leading-snug">
                                     ฐานรากถือเป็นแผ่นแกร่ง การเคลื่อนตัว w(x) = w<Sub text="0"/> + &theta;&middot;x
                                     แก้ระบบสมการ 2&times;2 จากสมดุลแรงและโมเมนต์ พร้อมวนซ้ำตัดช่วงที่ดินจะต้องรับแรงดึงออก
@@ -2990,13 +3099,13 @@
                                 <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-4">
                                     <div className="bg-white print:bg-transparent p-3 rounded border border-slate-200">
                                         <div className="font-semibold text-slate-700 border-b pb-1 mb-2">ดินใต้ฐานราก</div>
-                                        <div className="text-slate-600">k<Sub text="s"/> = q<Sub text="allow"/> &divide; s<Sub text="soil"/></div>
+                                        <div className="text-slate-600">k<Sub text="s"/> = q<Sub text="allow"/> &divide; s<Sub text="soil"/><Ref id="J3"/></div>
                                         <div className="text-slate-600">= {base.q_allow} &divide; {(raft.sSoil / 1000).toFixed(4)} ม.</div>
                                         <div className="font-bold text-indigo-700 mt-1">= {calc.ks_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })} กก./ม.&sup3;</div>
                                     </div>
                                     <div className="bg-white print:bg-transparent p-3 rounded border border-slate-200">
                                         <div className="font-semibold text-slate-700 border-b pb-1 mb-2">เสาเข็ม 1 ต้น</div>
-                                        <div className="text-slate-600">K<Sub text="pile"/> = P<Sub text="ใช้งาน"/> &divide; s<Sub text="pile"/></div>
+                                        <div className="text-slate-600">K<Sub text="pile"/> = P<Sub text="ใช้งาน"/> &divide; s<Sub text="pile"/></div><Ref id="R18"/>
                                         <div className="text-slate-600">= {pile.allowComp} &divide; {(raft.sPile / 1000).toFixed(4)} ม.</div>
                                         <div className="font-bold text-indigo-700 mt-1">= {calc.Kp_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })} กก./ม.</div>
                                     </div>
@@ -3044,7 +3153,7 @@
                                 <div className="text-xs bg-slate-100 print:bg-transparent border border-slate-200 rounded p-2 mb-3 leading-snug font-mono">
                                     w(x) = w<Sub text="0"/> + &theta;&middot;x &nbsp;&nbsp;|&nbsp;&nbsp;
                                     V = k<Sub text="s"/>&middot;S<Sub text="L"/>&middot;&int;w dx + &Sigma;(K<Sub text="p"/>&middot;w(x<Sub text="i"/>)) &nbsp;&nbsp;|&nbsp;&nbsp;
-                                    M = k<Sub text="s"/>&middot;S<Sub text="L"/>&middot;&int;w&middot;x dx + &Sigma;(K<Sub text="p"/>&middot;w(x<Sub text="i"/>)&middot;x<Sub text="i"/>)
+                                    M = k<Sub text="s"/>&middot;S<Sub text="L"/>&middot;&int;w&middot;x dx + &Sigma;(K<Sub text="p"/>&middot;w(x<Sub text="i"/>)&middot;x<Sub text="i"/>)<Ref id="R17"/>
                                 </div>
                                 <div className="text-xs text-slate-600 mb-3 leading-snug">
                                     ระบบสมการ 2 ตัวแปร 2 สมการ แก้แล้ววนซ้ำตัดช่วงที่ w ติดลบออก เพราะดินรับแรงดึงไม่ได้
@@ -3074,7 +3183,7 @@
                             <StepBox title="ขั้นที่ 3 — สูตรกระจายแรง (Elastic Center)">
                                 <div className="bg-slate-50 print:bg-transparent p-3 rounded-lg border border-slate-200 text-sm print:border-none print:p-0">
                                     <span className="font-mono bg-white print:bg-transparent px-2 py-1 rounded border border-slate-200 inline-block">
-                                        P<Sub text="i"/> = (V<Sub text="กลุ่ม"/> / N) + (M<Sub text="CG"/> &times; d<Sub text="i"/>) / &Sigma;d&sup2; &nbsp;;&nbsp; d<Sub text="i"/> = X<Sub text="CG"/> - x<Sub text="i"/>
+                                        P<Sub text="i"/> = (V<Sub text="กลุ่ม"/> / N) + (M<Sub text="CG"/> &times; d<Sub text="i"/>) / &Sigma;d&sup2; &nbsp;;&nbsp; d<Sub text="i"/> = X<Sub text="CG"/> - x<Sub text="i"/><Ref id="R16"/>
                                     </span>
                                 </div>
                                 <div className="mt-2 text-xs text-slate-500">
@@ -3084,22 +3193,73 @@
                         )}
 
                         {/* ═══════════ ขั้นที่ 4 ═══════════ */}
-                        <StepBox title="ขั้นที่ 4 — ที่มาของแรงในเสาเข็มแต่ละแถว">
+                        <StepBox title="ขั้นที่ 4 — การแบ่งแรงแนวดิ่ง: ดินรับเท่าไร เสาเข็มรับเท่าไร">
                             {calc.raftMode && calc.raftS ? (
                                 <div>
-                                    <div className="text-xs bg-emerald-50 print:bg-transparent border border-emerald-200 text-emerald-900 rounded p-2 mb-3 leading-snug">
+                                    <div className="text-xs bg-emerald-50 print:bg-transparent border border-emerald-200 text-emerald-900 rounded p-2 mb-4 leading-snug">
                                         แรงในเข็มได้จาก <strong>P<Sub text="i"/> = K<Sub text="pile"/> &times; w(x<Sub text="i"/>)</strong> โดยตรง
                                         ไม่ได้เอา V ลบส่วนที่ดินรับแล้วหารเฉลี่ย เพราะสปริงดินเปลี่ยนการหมุน &theta; ของฐานด้วย
                                         สัดส่วนแรงระหว่างแถวจึงเปลี่ยนไปด้วย ไม่ใช่แค่ลดลงเท่า ๆ กัน
                                     </div>
-                                    <table className="w-full text-left border-collapse text-sm print:text-xs">
+
+                                    {/* ── 4.1 แรงที่ดินรับ ── */}
+                                    <h5 className="font-bold text-slate-700 text-sm mb-2 mt-1">4.1 แรงกดที่ดินใต้ฐานรับ (กรณีวิกฤต {calc.raftGov.label})</h5>
+                                    <table className="w-full text-left border-collapse text-sm print:text-xs mb-4">
+                                        <tbody>
+                                            <tr className="border-b border-slate-200">
+                                                <td className="py-1.5 text-slate-600">ช่วงที่ดินสัมผัสฐาน</td>
+                                                <td className="text-slate-500 text-xs">x = {calc.raftS.a.toFixed(3)} ถึง {calc.raftS.b.toFixed(3)} ม.</td>
+                                                <td className="text-right font-semibold">ยาว {(calc.raftS.b - calc.raftS.a).toFixed(3)} ม.</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-200">
+                                                <td className="py-1.5 text-slate-600">การทรุดตัวที่ขอบซ้าย</td>
+                                                <td className="text-slate-500 text-xs">w({calc.raftS.a.toFixed(2)}) = w<Sub text="0"/> + &theta;&middot;x</td>
+                                                <td className="text-right">{(calc.raftS.wAt(calc.raftS.a) * 1000).toFixed(4)} มม.</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-200">
+                                                <td className="py-1.5 text-slate-600">การทรุดตัวที่ขอบขวา</td>
+                                                <td className="text-slate-500 text-xs">w({calc.raftS.b.toFixed(2)}) = w<Sub text="0"/> + &theta;&middot;x</td>
+                                                <td className="text-right">{(calc.raftS.wAt(calc.raftS.b) * 1000).toFixed(4)} มม.</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-200">
+                                                <td className="py-1.5 text-slate-600">แรงกดที่ขอบซ้าย</td>
+                                                <td className="text-slate-500 text-xs">q<Sub text="a"/> = k<Sub text="s"/> &times; w = {calc.ks_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })} &times; {calc.raftS.wAt(calc.raftS.a).toFixed(6)}</td>
+                                                <td className="text-right">{calc.raftS.q_a.toFixed(1)} กก./ม.&sup2;</td>
+                                            </tr>
+                                            <tr className="border-b border-slate-200">
+                                                <td className="py-1.5 text-slate-600">แรงกดที่ขอบขวา</td>
+                                                <td className="text-slate-500 text-xs">q<Sub text="b"/> = k<Sub text="s"/> &times; w = {calc.ks_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })} &times; {calc.raftS.wAt(calc.raftS.b).toFixed(6)}</td>
+                                                <td className="text-right">{calc.raftS.q_b.toFixed(1)} กก./ม.&sup2;</td>
+                                            </tr>
+                                            <tr className="bg-emerald-50 print:bg-transparent font-bold text-emerald-800">
+                                                <td className="py-2">แรงที่ดินรับ F<Sub text="soil"/></td>
+                                                <td className="text-xs font-normal text-slate-600">
+                                                    &frac12;(q<Sub text="a"/> + q<Sub text="b"/>) &times; ความยาวสัมผัส &times; S<Sub text="L"/>
+                                                    {' '}= &frac12;({calc.raftS.q_a.toFixed(1)} + {calc.raftS.q_b.toFixed(1)}) &times; {(calc.raftS.b - calc.raftS.a).toFixed(3)} &times; {pile.spacingL}
+                                                </td>
+                                                <td className="text-right">{calc.raftS.Fs.toFixed(1)} กก.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <div className="text-[11px] text-slate-500 mb-4 -mt-2">
+                                        แผนภาพแรงกดใต้ฐานเป็นสี่เหลี่ยมคางหมู เพราะฐานแกร่งจึงทรุดตัวเชิงเส้น พื้นที่ของแผนภาพคูณความกว้างช่วงเสาเข็มคือแรงที่ดินรับ
+                                        &nbsp;|&nbsp; ตรวจ q<Sub text="max"/> = {calc.raftS.q_max.toFixed(0)} เทียบ q<Sub text="allow"/> = {base.q_allow}
+                                        {' '}({(100 * calc.raftS.q_max / Math.max(1, base.q_allow)).toFixed(0)}%) {calc.okRaftQ
+                                            ? <span className="text-emerald-700 font-bold">ผ่าน</span>
+                                            : <span className="text-rose-700 font-bold">ไม่ผ่าน</span>}
+                                    </div>
+
+                                    {/* ── 4.2 แรงในเข็ม ── */}
+                                    <h5 className="font-bold text-slate-700 text-sm mb-2">4.2 แรงในเสาเข็มแต่ละแถว</h5>
+                                    <table className="w-full text-left border-collapse text-sm print:text-xs mb-4">
                                         <thead>
                                             <tr className="border-b border-slate-300 text-slate-600">
                                                 <th className="py-2">กรณี</th>
                                                 <th>แถว</th>
                                                 <th>x (ม.)</th>
                                                 <th>w(x) (มม.)</th>
-                                                <th>P = K<Sub text="pile"/> &times; w (กก.)</th>
+                                                <th>แทนค่า K<Sub text="pile"/> &times; w</th>
+                                                <th className="text-right">P<Sub text="i"/> (กก.)</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -3109,26 +3269,78 @@
                                                     <td>{r.id}</td>
                                                     <td>{r.x.toFixed(2)}</td>
                                                     <td>{(r.w * 1000).toFixed(4)}</td>
-                                                    <td className="font-semibold">{r.P.toFixed(0)}</td>
+                                                    <td className="text-xs text-slate-500">{calc.Kp_raft.toLocaleString(undefined, { maximumFractionDigits: 0 })} &times; {r.w.toFixed(6)}</td>
+                                                    <td className="text-right font-semibold">{r.P.toFixed(1)}</td>
                                                 </tr>
                                             )))}
                                         </tbody>
                                     </table>
-                                    <div className="mt-3 p-3 bg-slate-100 print:bg-transparent rounded border border-slate-200 text-sm">
-                                        <strong>ตรวจสมดุลแรง</strong> (กรณี {calc.raftGov.label}) &mdash; ผลรวมต้องเท่ากับแรงลัพธ์ที่รับมาจากขั้นที่ 1:
-                                        <div className="mt-1 font-mono text-xs">
-                                            เสาเข็ม {calc.raftS.rows.reduce((a, r) => a + r.P, 0).toFixed(1)}
-                                            &nbsp;+&nbsp; ดินใต้ฐาน {calc.raftS.Fs.toFixed(1)}
-                                            &nbsp;=&nbsp; {(calc.raftS.rows.reduce((a, r) => a + r.P, 0) + calc.raftS.Fs).toFixed(1)} กก.
-                                            &nbsp;เทียบกับ V<Sub text="กลุ่ม"/> = {calc.raftGov.V_grp.toFixed(1)} กก.
+
+                                    {/* ── 4.3 สรุปการแบ่งแรง ── */}
+                                    <h5 className="font-bold text-slate-700 text-sm mb-2">4.3 สรุปการแบ่งแรงแนวดิ่ง (กรณีวิกฤต {calc.raftGov.label})</h5>
+                                    <div className="flex h-8 rounded overflow-hidden border border-slate-400 text-[11px] font-bold text-white mb-3">
+                                        <div className="flex items-center justify-center bg-emerald-600 print:bg-emerald-600"
+                                            style={{ width: Math.max(0, Math.min(100, 100 * calc.raftS.share)) + '%' }}>
+                                            {calc.raftS.share > 0.10 ? 'ดิน ' + (100 * calc.raftS.share).toFixed(1) + '%' : ''}
                                         </div>
-                                        <div className="mt-1 text-xs text-slate-600">
-                                            ดินรับ <strong className="text-emerald-700">{(100 * calc.raftS.share).toFixed(1)}%</strong> เสาเข็มรับ <strong className="text-indigo-700">{(100 * (1 - calc.raftS.share)).toFixed(1)}%</strong>
-                                            &nbsp;|&nbsp; แรงกดใต้ฐานสูงสุด {calc.raftS.q_max.toFixed(0)} กก./ม.&sup2; ({(100 * calc.raftS.q_max / Math.max(1, base.q_allow)).toFixed(0)}% ของ q<Sub text="allow"/>)
-                                            {' '}{calc.okRaftQ ? <span className="text-emerald-700">ผ่าน</span> : <span className="text-rose-700 font-bold">ไม่ผ่าน</span>}
-                                            &nbsp;|&nbsp; ทรุดตัวสูงสุด {(calc.raftS.w_max * 1000).toFixed(2)} มม. (จำกัด {raft.sLimit})
-                                            {' '}{calc.okRaftSettle ? <span className="text-emerald-700">ผ่าน</span> : <span className="text-rose-700 font-bold">ไม่ผ่าน</span>}
+                                        <div className="flex items-center justify-center bg-indigo-600 print:bg-indigo-600"
+                                            style={{ width: Math.max(0, Math.min(100, 100 * (1 - calc.raftS.share))) + '%' }}>
+                                            เสาเข็ม {(100 * (1 - calc.raftS.share)).toFixed(1)}%
                                         </div>
+                                    </div>
+                                    <table className="w-full text-left border-collapse text-sm print:text-xs">
+                                        <thead>
+                                            <tr className="border-b border-slate-300 text-slate-600">
+                                                <th className="py-2">รายการ</th>
+                                                <th>ที่มา</th>
+                                                <th className="text-right">แรง (กก.)</th>
+                                                <th className="text-right">สัดส่วน</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr className="border-b border-slate-100 text-emerald-800">
+                                                <td className="py-1.5 font-semibold">ดินใต้ฐานราก</td>
+                                                <td className="text-xs text-slate-500">จากข้อ 4.1</td>
+                                                <td className="text-right font-semibold">{calc.raftS.Fs.toFixed(1)}</td>
+                                                <td className="text-right font-semibold">{(100 * calc.raftS.share).toFixed(1)}%</td>
+                                            </tr>
+                                            {calc.raftS.rows.map(r => (
+                                                <tr key={r.id} className="border-b border-slate-100 text-indigo-800">
+                                                    <td className="py-1.5">เสาเข็มแถวที่ {r.id} (x = {r.x.toFixed(2)} ม.)</td>
+                                                    <td className="text-xs text-slate-500">จากข้อ 4.2</td>
+                                                    <td className="text-right font-semibold">{r.P.toFixed(1)}</td>
+                                                    <td className="text-right">{(100 * r.P / Math.max(1, calc.raftGov.V_grp)).toFixed(1)}%</td>
+                                                </tr>
+                                            ))}
+                                            <tr className="border-b border-slate-200 text-indigo-800 bg-indigo-50 print:bg-transparent">
+                                                <td className="py-1.5 font-semibold">รวมเสาเข็มทุกต้น</td>
+                                                <td className="text-xs text-slate-500">{calc.N_piles} ต้น</td>
+                                                <td className="text-right font-bold">{calc.raftS.rows.reduce((a, r) => a + r.P, 0).toFixed(1)}</td>
+                                                <td className="text-right font-bold">{(100 * (1 - calc.raftS.share)).toFixed(1)}%</td>
+                                            </tr>
+                                            <tr className="font-bold bg-slate-100 print:bg-transparent">
+                                                <td className="py-2">รวมทั้งหมด</td>
+                                                <td className="text-xs font-normal text-slate-500">ดิน + เสาเข็ม</td>
+                                                <td className="text-right">{(calc.raftS.rows.reduce((a, r) => a + r.P, 0) + calc.raftS.Fs).toFixed(1)}</td>
+                                                <td className="text-right">100%</td>
+                                            </tr>
+                                            <tr className={Math.abs(calc.raftS.rows.reduce((a, r) => a + r.P, 0) + calc.raftS.Fs - calc.raftGov.V_grp) < 1 ? 'text-emerald-700' : 'text-rose-700'}>
+                                                <td className="py-2 font-semibold">ตรวจสมดุล</td>
+                                                <td className="text-xs font-normal text-slate-500">ต้องเท่ากับ V<Sub text="กลุ่ม"/> จากขั้นที่ 1</td>
+                                                <td className="text-right font-bold">{calc.raftGov.V_grp.toFixed(1)}</td>
+                                                <td className="text-right font-bold">
+                                                    {Math.abs(calc.raftS.rows.reduce((a, r) => a + r.P, 0) + calc.raftS.Fs - calc.raftGov.V_grp) < 1 ? '\u2713 ตรงกัน' : '\u2717 ไม่ตรง'}
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                    <div className="mt-3 text-xs text-slate-600 bg-slate-100 print:bg-transparent p-2 rounded border border-slate-200">
+                                        ทรุดตัวสูงสุด {(calc.raftS.w_max * 1000).toFixed(2)} มม. (จำกัด {raft.sLimit} มม.)
+                                        {' '}{calc.okRaftSettle ? <span className="text-emerald-700 font-bold">ผ่าน</span> : <span className="text-rose-700 font-bold">ไม่ผ่าน</span>}
+                                        &nbsp;|&nbsp; ดินสัมผัสฐาน {(100 * calc.raftS.contact).toFixed(0)}% ของความกว้าง
+                                        &nbsp;|&nbsp; ถ้าไม่มีเสาเข็ม ดินจะต้องรับ {calc.raftGov.V_grp.toFixed(0)} กก. ทั้งหมด
+                                        {' '}ซึ่งเท่ากับ {(calc.raftGov.V_grp / Math.max(0.001, calc.B * pile.spacingL)).toFixed(0)} กก./ม.&sup2;
+                                        {' '}({(100 * calc.raftGov.V_grp / Math.max(1, calc.B * pile.spacingL) / Math.max(1, base.q_allow)).toFixed(0)}% ของ q<Sub text="allow"/>)
                                     </div>
                                 </div>
                             ) : (
@@ -3227,7 +3439,7 @@
                             </div>
 
                             <div className="mt-4 text-xs text-slate-500 leading-relaxed border-t border-slate-200 pt-3">
-                                <strong>ขอบเขตที่ยังไม่ครอบคลุม:</strong> แรงเฉือนกระจายเท่ากันทุกเข็ม (ไม่คิดสติฟเนสด้านข้างและโมเมนต์ที่หัวเข็ม)
+                                <strong>ขอบเขตที่ยังไม่ครอบคลุม:</strong> แรงเฉือนกระจายเท่ากันทุกเข็ม (ไม่คิดสติฟเนสด้านข้างและโมเมนต์ที่หัวเข็ม)<Ref id="J6"/>
                                 &middot; ไม่คิด Group efficiency &middot; ไม่คิด Negative skin friction
                                 &middot; ไม่ตรวจ Punching shear ที่ฐานราก &middot; ไม่ตรวจการโก่งตัวด้านข้างของเสาเข็ม
                                 &middot; วิเคราะห์เฉพาะแกน X (2 มิติ)
@@ -3242,31 +3454,61 @@
                                         เมื่อฐานสัมผัสดินและดินรับแรงกด F<Sub text="soil"/> อยู่จริง ย่อมมีแรงเสียดทานที่ก้นฐานมาช่วยต้านการเลื่อน
                                         แรงตั้งฉากที่ใช้คือ <strong>F<Sub text="soil"/> จากขั้นที่ 4</strong> ไม่ใช่ &Sigma;V ทั้งก้อน เพราะส่วนที่ถ่ายลงเสาเข็มไม่ได้กดที่ก้นฐาน
                                     </div>
+                                    <div className="flex h-8 rounded overflow-hidden border border-slate-400 text-[11px] font-bold text-white mb-3">
+                                        <div className="flex items-center justify-center bg-emerald-600 print:bg-emerald-600"
+                                            style={{ width: Math.max(0, Math.min(100, 100 * calc.fricGov.H_fric_use / Math.max(1, calc.fricGov.P_grp))) + '%' }}>
+                                            {calc.fricGov.H_fric_use / Math.max(1, calc.fricGov.P_grp) > 0.10 ? 'เสียดทาน ' + (100 * calc.fricGov.H_fric_use / Math.max(1, calc.fricGov.P_grp)).toFixed(1) + '%' : ''}
+                                        </div>
+                                        <div className="flex items-center justify-center bg-indigo-600 print:bg-indigo-600"
+                                            style={{ width: Math.max(0, Math.min(100, 100 * calc.fricGov.H_pile_d / Math.max(1, calc.fricGov.P_grp))) + '%' }}>
+                                            เสาเข็ม {(100 * calc.fricGov.H_pile_d / Math.max(1, calc.fricGov.P_grp)).toFixed(1)}%
+                                        </div>
+                                    </div>
                                     <table className="w-full text-left border-collapse text-sm print:text-xs">
+                                        <thead>
+                                            <tr className="border-b border-slate-300 text-slate-600">
+                                                <th className="py-2">รายการ</th>
+                                                <th>ที่มา</th>
+                                                <th className="text-right">แรง (กก.)</th>
+                                                <th className="text-right">สัดส่วน</th>
+                                            </tr>
+                                        </thead>
                                         <tbody>
-                                            <tr className="border-b border-slate-200">
-                                                <td className="py-1.5">แรงผลักด้านข้าง P<Sub text="กลุ่ม"/> (กรณีวิกฤต {calc.fricGov.label})</td>
-                                                <td className="text-right font-semibold">{calc.fricGov.P_grp.toFixed(0)} กก.</td>
+                                            <tr className="border-b border-slate-200 font-semibold bg-slate-100 print:bg-transparent">
+                                                <td className="py-1.5">แรงผลักด้านข้าง P<Sub text="กลุ่ม"/></td>
+                                                <td className="text-xs font-normal text-slate-500">กรณีวิกฤต {calc.fricGov.label} จากขั้นที่ 1</td>
+                                                <td className="text-right">{calc.fricGov.P_grp.toFixed(0)}</td>
+                                                <td className="text-right">100%</td>
                                             </tr>
-                                            <tr className="border-b border-slate-200">
-                                                <td className="py-1.5">แรงกดที่ดินรับ F<Sub text="soil"/></td>
-                                                <td className="text-right">{calc.fricGov.Fs_soil.toFixed(0)} กก.</td>
+                                            <tr className="border-b border-slate-100">
+                                                <td className="py-1.5 text-slate-600">แรงกดที่ดินรับ F<Sub text="soil"/></td>
+                                                <td className="text-xs text-slate-500">จากข้อ 4.1</td>
+                                                <td className="text-right">{calc.fricGov.Fs_soil.toFixed(0)}</td>
+                                                <td className="text-right text-slate-400">&mdash;</td>
                                             </tr>
-                                            <tr className="border-b border-slate-200">
-                                                <td className="py-1.5">แรงเสียดทานประลัย = f &times; F<Sub text="soil"/> = {calc.f_calc.toFixed(3)} &times; {calc.fricGov.Fs_soil.toFixed(0)}</td>
-                                                <td className="text-right">{calc.fricGov.H_fric_ult.toFixed(0)} กก.</td>
+                                            <tr className="border-b border-slate-100">
+                                                <td className="py-1.5 text-slate-600">แรงเสียดทานประลัย</td>
+                                                <td className="text-xs text-slate-500">f &times; F<Sub text="soil"/> = {calc.f_calc.toFixed(3)} &times; {calc.fricGov.Fs_soil.toFixed(0)}</td>
+                                                <td className="text-right">{calc.fricGov.H_fric_ult.toFixed(0)}</td>
+                                                <td className="text-right text-slate-400">&mdash;</td>
                                             </tr>
-                                            <tr className="border-b border-slate-200 text-emerald-700">
-                                                <td className="py-1.5">หาร F.S. ลื่นไถล {fsSlideReq.toFixed(2)} &rarr; นำมาใช้ได้</td>
-                                                <td className="text-right font-bold">{calc.fricGov.H_fric_use.toFixed(0)} กก. ({(100 * calc.fricGov.H_fric_use / Math.max(1, calc.fricGov.P_grp)).toFixed(0)}%)</td>
+                                            <tr className="border-b border-slate-100 text-emerald-800">
+                                                <td className="py-1.5 font-semibold">แรงเสียดทานที่นำมาใช้ได้</td>
+                                                <td className="text-xs text-slate-500">หาร F.S. ลื่นไถล {fsSlideReq.toFixed(2)}<Ref id="J2"/></td>
+                                                <td className="text-right font-bold">{calc.fricGov.H_fric_use.toFixed(0)}</td>
+                                                <td className="text-right font-bold">{(100 * calc.fricGov.H_fric_use / Math.max(1, calc.fricGov.P_grp)).toFixed(1)}%</td>
                                             </tr>
-                                            <tr className="border-b border-slate-200 bg-white print:bg-transparent">
+                                            <tr className="border-b border-slate-200 text-indigo-800 bg-indigo-50 print:bg-transparent">
                                                 <td className="py-1.5 font-semibold">เสาเข็มรับส่วนที่เหลือ</td>
-                                                <td className="text-right font-bold text-indigo-700">{calc.fricGov.H_pile_d.toFixed(0)} กก. = {calc.V_shear_pile.toFixed(0)} กก./ต้น</td>
+                                                <td className="text-xs font-normal text-slate-500">{calc.fricGov.P_grp.toFixed(0)} - {calc.fricGov.H_fric_use.toFixed(0)} &divide; {calc.N_piles} ต้น</td>
+                                                <td className="text-right font-bold">{calc.fricGov.H_pile_d.toFixed(0)} <span className="font-normal text-xs">= {calc.V_shear_pile.toFixed(0)}/ต้น</span></td>
+                                                <td className="text-right font-bold">{(100 * calc.fricGov.H_pile_d / Math.max(1, calc.fricGov.P_grp)).toFixed(1)}%</td>
                                             </tr>
-                                            <tr>
-                                                <td className="py-1.5 text-slate-500">กรณีทนทาน ไม่มีแรงเสียดทาน เข็มรับทั้งหมด</td>
-                                                <td className="text-right text-slate-700">{calc.fricGov.H_pile_n.toFixed(0)} กก. = {calc.V_shear_pile_n.toFixed(0)} กก./ต้น</td>
+                                            <tr className="text-slate-600">
+                                                <td className="py-1.5">กรณีทนทาน ไม่มีแรงเสียดทาน</td>
+                                                <td className="text-xs text-slate-500">เข็มรับทั้งหมด &divide; {calc.N_piles} ต้น</td>
+                                                <td className="text-right">{calc.fricGov.H_pile_n.toFixed(0)} <span className="text-xs">= {calc.V_shear_pile_n.toFixed(0)}/ต้น</span></td>
+                                                <td className="text-right">100%</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -3322,7 +3564,7 @@
                             <StepBox title="ขั้นที่ 7 — กรณีตรวจความทนทาน (ถ้าดินหลุดจากใต้ฐาน)">
                                 <div className={`p-3 rounded-lg border-2 print:break-inside-avoid ${calc.okPileComp && calc.okPileShear ? 'bg-emerald-50 border-emerald-300' : 'bg-rose-50 border-rose-300'}`}>
                                     <div className="text-[13px] leading-snug text-slate-700">
-                                        รันซ้ำด้วย k<Sub text="s"/> = 0 ซึ่งให้ผลเท่ากับโหมด Full Load พอดี
+                                        รันซ้ำด้วย k<Sub text="s"/> = 0 ซึ่งให้ผลเท่ากับโหมด Full Load พอดี<Ref id="J1"/>
                                     </div>
                                     <table className="w-full text-left border-collapse text-sm print:text-xs mt-2">
                                         <tbody>
@@ -3362,19 +3604,19 @@
 
                                 <div className="grid grid-cols-2 sm:grid-cols-4 print:grid-cols-4 gap-3 mb-4 text-xs">
                                     <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-slate-500">EI (แตกร้าว)</div>
+                                        <div className="text-slate-500">EI (แตกร้าว)</div><Ref id="R29"/>
                                         <div className="font-bold text-slate-700">{lateral.EI.toFixed(0)} kN·m²</div>
                                     </div>
                                     <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-slate-500">M<Sub text="cr"/> / M<Sub text="u"/></div>
+                                        <div className="text-slate-500">M<Sub text="cr"/> / M<Sub text="u"/></div><Ref id="R31"/>
                                         <div className="font-bold text-slate-700">{lateral.Mcr_tm.toFixed(2)} / {lateral.My_tm.toFixed(2)} ต.·ม.</div>
                                     </div>
                                     <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-slate-500">{lat.soilType === 'clay' ? 'k = 67c_u' : 'n_h'}</div>
+                                        <div className="text-slate-500">{lat.soilType === 'clay' ? 'k = 67c_u' : 'n_h'}</div><Ref id="R23"/>
                                         <div className="font-bold text-slate-700">{lat.soilType === 'clay' ? lateral.k.toFixed(0) + ' kN/m²' : 'T = ' + lateral.T.toFixed(2) + ' ม.'}</div>
                                     </div>
                                     <div className="bg-white print:bg-transparent p-2 rounded border border-slate-200 text-center">
-                                        <div className="text-slate-500">ระยะยาวลักษณะ</div>
+                                        <div className="text-slate-500">ระยะยาวลักษณะ</div><Ref id="R20"/>
                                         <div className="font-bold text-slate-700">{lateral.charLen.toFixed(2)} ม.</div>
                                     </div>
                                 </div>
@@ -3383,7 +3625,7 @@
                                     <thead>
                                         <tr className="border-b border-slate-300 text-slate-600">
                                             <th className="py-2">กลไกที่ตรวจ</th>
-                                            <th>สมการ</th>
+                                            <th>สมการ</th><Ref id="R21"/>
                                             <th>H (กก.)</th>
                                             <th>H (ตัน)</th>
                                             <th>สถานะ</th>
@@ -3447,6 +3689,17 @@
                             </StepBox>
                         )}
                     </div>
+                );
+            };
+
+            /* ป้ายอ้างอิงที่มาของสมการ วางท้ายสูตร ชี้เมาส์เพื่อดูรายละเอียด
+               รหัส R = ทฤษฎี/มาตรฐานที่ตีพิมพ์  รหัส J = ดุลพินิจของผู้พัฒนา */
+            const Ref = ({ id }) => {
+                const r = REFS[id];
+                if (!r) return null;
+                return (
+                    <sup className={`ml-1 px-1 py-0.5 rounded text-[9px] font-bold align-super cursor-help ${id.charAt(0) === 'J' ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-200 text-slate-600 border border-slate-300'}`}
+                        title={r[0] + ' \u2014 ' + r[1] + (r[2] ? '\n' + r[2] : '')}>{id}</sup>
                 );
             };
 
@@ -3667,6 +3920,45 @@
                         </div>
 
                         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm text-sm text-slate-700 leading-relaxed space-y-4 print:break-inside-avoid">
+                        <h3 className="font-bold text-lg text-slate-800 border-b pb-2">ที่มาของสมการทุกตัวที่ใช้ในโปรแกรม</h3>
+                            <p className="text-xs text-slate-500 mt-2 mb-3 leading-snug">
+                                รหัสขึ้นต้นด้วย <strong className="text-slate-700">R</strong> = มาจากทฤษฎีหรือมาตรฐานที่ตีพิมพ์
+                                &nbsp;|&nbsp; รหัสขึ้นต้นด้วย <strong className="text-amber-700">J</strong> = <strong>ดุลพินิจของผู้พัฒนาโปรแกรม ไม่ใช่ข้อกำหนดจากมาตรฐาน</strong>
+                                ซึ่งผู้ใช้ควรพิจารณาว่าสอดคล้องกับมาตรฐานที่ใช้บังคับในงานของท่านหรือไม่
+                                &nbsp;ป้ายรหัสเดียวกันนี้ปรากฏท้ายสูตรในแท็บคำนวณ ชี้เมาส์เพื่อดูรายละเอียด
+                            </p>
+                            <table className="w-full text-left border-collapse text-sm print:text-xs mb-6">
+                                <thead>
+                                    <tr className="border-b-2 border-slate-300 text-slate-600">
+                                        <th className="py-2 w-12">รหัส</th>
+                                        <th className="w-1/4">สมการ</th>
+                                        <th className="w-1/4">ที่มา</th>
+                                        <th>หมายเหตุและข้อจำกัด</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Object.keys(REFS).map(k => (
+                                        <tr key={k} className={`border-b border-slate-100 ${k.charAt(0) === 'J' ? 'bg-amber-50 print:bg-transparent' : ''}`}>
+                                            <td className="py-2 font-bold align-top">
+                                                <span className={`px-1.5 py-0.5 rounded text-xs ${k.charAt(0) === 'J' ? 'bg-amber-200 text-amber-900' : 'bg-slate-200 text-slate-700'}`}>{k}</span>
+                                            </td>
+                                            <td className="align-top font-mono text-xs">{REFS[k][0]}</td>
+                                            <td className="align-top text-xs">{REFS[k][1]}</td>
+                                            <td className="align-top text-xs text-slate-600">{REFS[k][2]}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+
+                            <div className="bg-slate-50 border border-slate-200 rounded p-3 text-xs text-slate-600 leading-relaxed mb-6">
+                                <strong className="text-slate-800">สิ่งที่โปรแกรมนี้ยังไม่ครอบคลุม:</strong> แรงดันดินด้านรับ (Passive) &middot; แรงยึดเกาะ c ของดินฐานราก
+                                &middot; ดินถมลาดเอียง (&beta;) &middot; แรงเสียดทานระหว่างดินกับผนัง (&delta;) &middot; ดินหลายชั้น
+                                &middot; แรงจากแผ่นดินไหว (Mononobe-Okabe) &middot; เสถียรภาพลาดดินโดยรวม &middot; การทรุดตัวระยะยาว
+                                &middot; การออกแบบเหล็กเสริมของตัวกำแพงและฐานราก &middot; Punching shear
+                                &middot; ปฏิสัมพันธ์ระหว่างเสาเข็ม (pile-soil-pile interaction) &middot; Negative skin friction
+                                &middot; การวิเคราะห์ในแนวขวางกำแพง (โปรแกรมคิดเฉพาะแกน X แบบ 2 มิติ)
+                            </div>
+
                         <h3 className="font-bold text-lg text-slate-800 border-b pb-2">คู่มือและอภิธานศัพท์เพิ่มเติม</h3>
                         <div>
                             <strong className="text-blue-700">กฎ Middle-Third:</strong><br/>
